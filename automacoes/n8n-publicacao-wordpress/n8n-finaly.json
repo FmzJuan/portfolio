@@ -1,0 +1,964 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "=",
+        "returnAll": true,
+        "filter": {
+          "driveId": {
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "value": "SEU_GOOGLE_DRIVE_FOLDER_ID_AQUI",
+            "mode": "id"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {}
+      },
+      "id": "0eade04b-9fa6-4a20-8833-bba1c361c19e",
+      "name": "Search Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -8768,
+        -800
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "SEU_GOOGLE_DRIVE_CONNECTION_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 100,
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -8400,
+        -800
+      ],
+      "id": "60c9d82c-997e-4cfb-b6af-5ba5c10659b4",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "=list",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.id }}",
+            "mode": "id"
+          },
+          "whatToSearch": "all",
+          "fileTypes": [
+            "application/vnd.google-apps.folder",
+            "application/vnd.google-apps.document"
+          ]
+        },
+        "options": {
+          "fields": [
+            "name",
+            "id",
+            "mimeType"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -8192,
+        -640
+      ],
+      "id": "b208622a-0add-45ca-959e-21ddf3e53635",
+      "name": "Search files and folders",
+      "alwaysOutputData": false,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "SEU_GOOGLE_DRIVE_CONNECTION_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "={{ $json.id }}",
+        "simple": false
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        -8016,
+        -768
+      ],
+      "id": "faaee891-a7b6-44ee-8abb-df21a1eecf51",
+      "name": "Get a document",
+      "alwaysOutputData": false,
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "SEU_GOOGLE_DOCS_CONNECTION_ID",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -7792,
+        -1056
+      ],
+      "id": "5ad34b38-dbc1-40eb-a221-f40167fb4ede",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==================== HELPERS ====================\n\n// Normaliza conteúdo vindo do Google Docs\nfunction normalizeContent(str) {\n  if (!str) return \"\";\n\n  // Trata objetos vindos como JSON do Google Docs\n  if (typeof str === \"object\") {\n    try {\n      str = JSON.stringify(str);\n    } catch (_) {\n      str = String(str);\n    }\n  }\n\n  return String(str)\n\n    // Remove HTML e tabelas\n    .replace(/<[^>]+>/g, \" \")\n\n    // Remove markdown de tabela do Google Docs (| coluna | valor |)\n    .replace(/\\|+/g, \" \")\n\n    // Normaliza símbolos de hífen e traço (Google Docs usa caracteres Unicode estranhos)\n    .replace(/[–—−]/g, \"-\")\n\n    // Insere quebras ANTES de cada novo dia (1º dia, 2º dia, Dia 3 etc)\n    .replace(/(?=(?:\\b\\d+\\s*(?:º|o)?\\s*dia\\b|\\bdia\\s*\\d+\\b))/gi, \"\\n\")\n\n    // Corrige quando o hífen fica colado no número (ex: \"1ºdia-\" → \"1º dia -\")\n    .replace(/(\\d+\\s*(?:º|o)?\\s*)dia\\s*[-–—]?\\s*/gi, (_, p1) => `${p1}dia - `)\n\n    // Garante quebra antes e depois de “Refeições:”\n    .replace(/Refei(?:ç|c)ões?:/gi, \"\\nRefeições:\")\n\n    // Remove múltiplas quebras seguidas\n    .replace(/\\r/g, \"\\n\")\n    .replace(/\\n{2,}/g, \"\\n\")\n\n    // Remove espaços repetidos\n    .replace(/[ \\t]{2,}/g, \" \")\n\n    // Normaliza barras / que vêm grudadas (Beijing/Xian → Beijing / Xian)\n    .replace(/([A-Za-zÁÉÍÓÚÂÊÔÃÕÇ])\\/([A-Za-zÁÉÍÓÚÂÊÔÃÕÇ])/g, \"$1 / $2\")\n\n    // Corrige “...” e “ ..” para “...”\n    .replace(/\\s*\\.\\.\\.\\s*/g, \" ... \")\n\n    .trim();\n}\n// Função para extrair texto entre 2 regex\nfunction between(text, startRegex, endRegex) {\n  const start = text.search(startRegex);\n  if (start === -1) return \"\";\n  const rest = text.slice(start);\n  if (!endRegex) return rest.trim();\n  const end = rest.search(endRegex);\n  if (end === -1) return rest.trim();\n  return rest.slice(0, end).trim();\n}\n\n\n// ==================== PARSER SAÍDAS ====================\nfunction parseSaidas(text) {\n  if (!text) return [];\n\n  let s = String(text).replace(/\\r/g, ' ').replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();\n\n  // 0 - Saídas: Diárias, conforme calendário de partidas.\n  const regexFull = /(Sa[ií]das?:\\s*Diárias, conforme calendário de partidas\\.)/i;\n  const matchFull = s.match(regexFull);\n\n  // 1 - Diárias, conforme calendário de partidas.\n  const regexFreq = /(Diárias, conforme calendário de partidas\\.)/i;\n  const matchFreq = s.match(regexFreq);\n\n  // 2 - Mínimo de 2 participantes\n  const regexMin = /(M[ií]nimo de \\d+ participantes)/i;\n  const matchMin = s.match(regexMin);\n\n  const arr = [];\n  if (matchFull) arr.push(matchFull[1].trim());\n  if (matchFreq) arr.push(matchFreq[1].trim());\n  if (matchMin) arr.push(matchMin[1].trim());\n\n  // 3 - Roteiro entre \"partidas.\" e \"Mínimo...\"\n  if (matchFreq && matchMin) {\n    const startIdx = s.indexOf(matchFreq[1]) + matchFreq[1].length;\n    const endIdx = s.indexOf(matchMin[1]);\n    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {\n      const roteiro = s.slice(startIdx, endIdx).trim();\n      if (roteiro) arr.push(roteiro);\n    }\n  }\n\n  return arr;\n}\n// Extrai itinerário de forma universal (funciona para texto limpo e quebrado)\nfunction extractItinerary(text) {\n  if (!text) return \"\";\n\n  const raw = String(text);\n\n  // ENCONTRA \"1º dia\", \"1o dia\", \"1 dia\", \"Dia 1\"\n  const inicioRegex = /(1\\s*(?:º|o)?\\s*dia|dia\\s*1)/i;\n  const matchInicio = raw.match(inicioRegex);\n\n  if (!matchInicio) return \"\";\n\n  const start = raw.indexOf(matchInicio[0]);\n\n  // Cortamos DALI PARA FRENTE — nada antes importa\n  let sub = raw.slice(start);\n\n  // Agora procuramos o fim real\n  const fimRegex = /(Fim dos serviços\\.|FIM DOS SERVIÇOS\\.|Fim de nossos serviços\\.)/i;\n  const matchFim = sub.match(fimRegex);\n\n  if (matchFim) {\n    const end = sub.indexOf(matchFim[0]) + matchFim[0].length;\n    sub = sub.slice(0, end);\n  }\n\n  // Limpeza suave sem destruir linhas\n  sub = sub\n    .replace(/\\r/g, \"\")\n    .replace(/[ \\t]+/g, \" \")\n    .replace(/\\n{2,}/g, \"\\n\")\n    .trim();\n\n  return sub;\n}\n// ==================== PROCESSA TODOS ====================\nconst results = items.map(item => {\n  const content = normalizeContent(item.json.content || \"\");\n  const titulo = item.json.nome || \"\";\n  const tables = item.json.tables || [];\n  const hoteisHtml = item.json.hoteis || \"\"; \n  const calendarioHtml = item.json.calendario || \"\";\n\n  // Prévia -> de \"Saídas:\" até \"1º dia\"\n  const previa = between(content, /Sa[ií]das?:/i, /1(?:º|o)?\\s*dia/i);\n\n  // ✅ Novo recorte de itinerário (universal)\n  const itinerario = extractItinerary(content);\n\n  // Observações -> entre títulos tradicionais\n  let observacoes = between(\n    content,\n    /Observa[cç][oõ]es/i,\n    /Documentos\\s+necess[aá]rios/i\n  );\n  if (!observacoes) {\n    const altMatch = content.match(\n      /(Todos\\s+os\\s+pre[cç]os[\\s\\S]*?(?:confirma[cç][aã]o\\s+da\\s+reserva\\.|(?=Passaporte\\s+com\\s+validade)))/i\n    );\n    if (altMatch) observacoes = altMatch[1].trim();\n  }\n\n  // Documentos\n  let documentos = between(content, /Documentos\\s+necess[aá]rios/i, /Pacote\\s+Inclui/i);\n  if (!documentos) {\n    const altMatch = content.match(\n      /(Passaporte\\s+com\\s+validade[\\s\\S]*?(?:Para\\s+passageiros\\s+portadores\\s+de\\s+passaporte\\s+de\\s+outras\\s+nacionalidades[\\s\\S]*?competentes\\.|(?=Hospedagem)))/i\n    );\n    if (altMatch) documentos = altMatch[1].trim();\n  }\n\n  // Inclui\n  let inclui = between(content, /Pacote\\s+Inclui/i, /Pacote\\s+N[aã]o\\s+Inclui/i);\n  if (!inclui) {\n    const altMatch = content.match(\n      /(Hospedagem\\s+nos\\s+hot[eé]is[\\s\\S]*?(?:Ingressos\\s+dos\\s+monumentos\\s+e\\s+locais\\s+visitados\\.|(?=Parte\\s+a[eé]rea\\s+internacional)))/i\n    );\n    if (altMatch) inclui = altMatch[1].trim();\n  }\n\n  // Não Inclui\n  let naoInclui = between(content, /Pacote\\s+N[aã]o\\s+Inclui/i, /(Hot[eé]is\\s+previstos.*|Informa[cç][oõ]es\\s+Gerais)/i);\n  if (!naoInclui) {\n    const altMatch = content.match(\n      /(Taxas\\s+de\\s+embarque[\\s\\S]*?(?:Quaisquer\\s+despesas\\s+extras.*?programa\\.|(?=\\*\\s*Para\\s+reservas)))/i\n    );\n    if (altMatch) naoInclui = altMatch[1].trim();\n  }\n\n  return {\n    json: {\n      titulo,\n      previa,\n      itinerario,\n      observacoes,\n      documentos,\n      inclui,\n      naoInclui,\n      hoteis: hoteisHtml,\n      calendario: calendarioHtml,\n      tables\n    }\n  };\n});\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7328,
+        -1232
+      ],
+      "id": "3b78e175-bcea-4000-8911-63601376a001",
+      "name": "separando as seçoes "
+    },
+    {
+      "parameters": {
+        "resource": "page",
+        "title": "={{ $json.titulo }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.wordpress",
+      "typeVersion": 1,
+      "position": [
+        -4656,
+        -1056
+      ],
+      "id": "20ccca0d-6b5e-4b87-ac64-78a401a5d622",
+      "name": "Create a page4",
+      "credentials": {
+        "wordpressApi": {
+          "id": "SEU_WORDPRESS_CONNECTION_ID",
+          "name": "Wordpress account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "page",
+        "operation": "update",
+        "pageId": "={{$json.id}}",
+        "updateFields": {
+          "title": "={{ $('Removendo os /n /g').item.json.titulo }}",
+          "content": "={{ $('Removendo os /n /g').item.json.tituloAHtml }}{{ $('Removendo os /n /g').item.json.previaHtml }}{{ $('Removendo os /n /g').item.json.itinerarioHtml }}{{ $('Removendo os /n /g').item.json.ObservacoesHtml }}{{ $('Removendo os /n /g').item.json.documentosHtml }}{{ $('Removendo os /n /g').item.json.incluiHtml }}{{ $('Removendo os /n /g').item.json.naoIncluiHtml }}{{ $('Removendo os /n /g').item.json.htmlFinal }}",
+          "status": "draft",
+          "pageTemplate": {
+            "values": {
+              "elementor": false,
+              "template": "elementor_theme"
+            }
+          },
+          "menuOrder": 0
+        }
+      },
+      "type": "n8n-nodes-base.wordpress",
+      "typeVersion": 1,
+      "position": [
+        -4448,
+        -1056
+      ],
+      "id": "696ab47a-e210-45b5-9ce3-32bb8a300415",
+      "name": "Update a page3",
+      "credentials": {
+        "wordpressApi": {
+          "id": "vWFFHDg7mhga5dbA",
+          "name": "Wordpress account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens\nconst allItems = $input.all();\nlet results = [];\n\n// PREPARAÇÃO (BACKUP):\n// Caso o Agente tenha retornado uma LISTA de mapas no primeiro item\nlet listaDeMapas = [];\ntry {\n    let rawOutput = $input.first().json.output;\n    if (Array.isArray(rawOutput)) {\n        listaDeMapas = rawOutput;\n    } else if (rawOutput) {\n        listaDeMapas = [rawOutput];\n    }\n} catch (e) {}\n\n// LOOP PRINCIPAL\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i];\n  const data = item.json;\n\n  // Lógica de Seleção do Mapa\n  let mapaAtual = \"\";\n  if (data.output && typeof data.output === 'string') {\n      mapaAtual = data.output;\n  }\n  else if (listaDeMapas.length > i && listaDeMapas[i]) {\n      mapaAtual = listaDeMapas[i];\n  }\n  if (!mapaAtual && Array.isArray(data.output)) {\n      mapaAtual = data.output[0];\n  }\n\n  const titulo = data.titulo;\n  const itinerario = data.itinerarioArray || [];\n\n  // Início do HTML\n  let itinerarioHtml = `\n  <div style=\"display: flex; justify-content: flex-start; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-top: 10px;\">\n      <div style=\"flex: 1 1 48%; min-width: 320px; box-sizing: border-box;\">\n      <h3 style=\"font-family: Helvetica;\">ITINERÁRIO</h3>\n  `;\n\n  // Loop dos dias\n  for (const it of itinerario) {\n    let rawDia = it.dia ?? it.tituloDia ?? \"\";\n    let tituloDia = Array.isArray(rawDia) ? rawDia.filter(Boolean).join(\" \").trim() : String(rawDia).trim();\n    \n    // 1. Prepara o texto do Opcional\n    let opcionalRaw = it.opcionalSugerido || [];\n    let textoOpcionalLimpo = \"\";\n    \n    if (Array.isArray(opcionalRaw) && opcionalRaw.length > 0) {\n        textoOpcionalLimpo = opcionalRaw.join(\"; \");\n    } else if (typeof opcionalRaw === 'string') {\n        textoOpcionalLimpo = opcionalRaw.trim();\n    }\n\n    // 2. Limpeza do Conteúdo\n    let conteudo = (it.conteudo || \"\")\n        .replace(/<br\\s*\\/?>/gi, \" \")\n        .replace(/\\n+/g, \" \")\n        .replace(/\\s+/g, \" \")\n        .trim();\n\n    // --- CORREÇÃO DA DUPLICIDADE ---\n    if (textoOpcionalLimpo.length > 5) { \n        // Cria regex segura escapando caracteres especiais\n        const regexTexto = textoOpcionalLimpo.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n        const regexRemocao = new RegExp(regexTexto, 'gi');\n        \n        // Remove o texto do opcional de dentro do conteúdo\n        conteudo = conteudo.replace(regexRemocao, \"\");\n        // Remove prefixos soltos no final\n        conteudo = conteudo.replace(/(Opcional|Sugestão|Opcional Sugerido)\\s*[-–:]*\\s*$/i, \"\").trim();\n        conteudo = conteudo.replace(/\\.\\s*\\.$/, \".\");\n    }\n\n    // 3. Monta o HTML do Opcional (Cor Cinza + Sem buraco extra)\n    let opcionalHtml = \"\";\n    if (textoOpcionalLimpo) {\n        // MUDANÇA AQUI:\n        // 1. Removi o <br> do início (ele vai colar na linha de baixo do conteúdo)\n        // 2. Adicionei style=\"color: #666666\" (Cinza Escuro/Claro)\n        opcionalHtml = `<span style=\"color: #666666;\">${textoOpcionalLimpo}</span><br>\\n`;\n    }\n\n    // 4. Refeições\n    let refeicoesRaw = (it.refeicoes || \"\").trim();\n    let refeicoesHtml = \"\";\n    if (refeicoesRaw && refeicoesRaw !== \"-\") { \n      let textoRefeicao = /refeiç/i.test(refeicoesRaw) ? refeicoesRaw : `Refeições: ${refeicoesRaw}`;\n      refeicoesHtml = `<em>${textoRefeicao}</em><br>\\n`;\n    } else if (refeicoesRaw === \"-\" || refeicoesRaw === \"-.\") {\n       refeicoesHtml = `<em>Refeições: -.</em><br>\\n`;\n    }\n\n    // Montagem final do dia\n    itinerarioHtml += `<strong>${tituloDia}</strong><br>\\n`;\n    \n    // Conteúdo adiciona um <br> no final, então o opcional entra na próxima linha\n    if (conteudo) itinerarioHtml += `<span>${conteudo}</span><br>\\n`;\n    \n    if (opcionalHtml) itinerarioHtml += `${opcionalHtml}`;\n    if (refeicoesHtml) itinerarioHtml += `${refeicoesHtml}`;\n    \n    itinerarioHtml += `<br>\\n`; \n  }\n\n  // Inserção do Mapa\n  itinerarioHtml += `\n      </div>\n      <div style=\"flex: 1 1 35%; min-width: 340px; display: flex; justify-content: flex-end; align-items: flex-start; margin-left: 30px;\">\n        <div style=\"width: 100%; max-width: 520px; height: 480px; border-radius: 12px; overflow: hidden; background: transparent !important; box-shadow: none !important; ${!mapaAtual ? 'border: 1px dashed #ccc;' : ''}\">\n          <div style=\"width: 100%; height: 100%; background: transparent !important; border: none !important; margin: 0; padding: 0;\">\n            ${mapaAtual || '<p style=\"text-align:center; color:#999; padding-top:100px;\">Mapa indisponível</p>'}\n          </div>\n        </div>\n      </div>\n    </div>\n    <style>@media (min-width: 900px) { .itinerario-flex-container { display: flex !important; flex-wrap: nowrap !important; align-items: flex-start !important; } }</style>\n  `;\n\n  results.push({\n    json: {\n      ...data,\n      titulo,\n      itinerarioHtml,\n      tituloAHtml: data.tituloAHtml || \"\",\n      previaHtml: data.previaHtml || \"\",\n      observacoesArray: data.observacoesArray || [],\n      documentosArray: data.documentosArray || [],\n      incluiArray: data.incluiArray || [],\n      naoIncluiArray: data.naoIncluiArray || [],\n      naoIncluiParsed: data.naoIncluiParsed || [],\n      hoteisArray: data.hoteisArray || [],\n      calendarioArray: data.calendarioArray || [],\n      itinerarioArray: data.itinerarioArray || [],\n      cidades: data.cidades || [],\n      mapa_automatico: mapaAtual \n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5536,
+        -1200
+      ],
+      "id": "e991d2c8-d508-41a6-be68-d4509d84c4c0",
+      "name": "Template html - Itinerario"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens que chegam ao Code Node (cada item é um roteiro diferente)\nconst allItems = $input.all();\nlet results = [];\n\nfor (const item of allItems) {\n  const data = item.json;\n\n  const titulo = data.titulo;\n  const previa = data.previaArray || [];\n  const tituloArrays = data.tituloArray || [];\n\n  // ✅ Agora captura corretamente as cidades recebidas do node anterior\n  const cidades = data.cidades || [];\n  const listaCidades = cidades.join(', ');\n\n  // ✅ Adiciona a saída do agente (vem do primeiro input)\n  const mapaAutomatico = $input.first().json.output || null;\n\n  // 👉 Arrays originais preservados\n  const itinerarioArray = data.itinerarioArray || [];\n  const observacoesArray = data.observacoesArray || [];\n  const documentosArray = data.documentosArray || [];\n  const incluiArray = data.incluiArray || [];\n  const naoIncluiArray = data.naoIncluiArray || [];\n  const naoIncluiParsed = data.naoIncluiParsed || [];\n  const hoteisArray = data.hoteisArray || [];\n  const calendarioArray = data.calendarioArray || [];\n\n  let tituloAHtml = `\n  <!--Titulo-->\n  <h1 dir=\"auto\" style=\"vertical-align: inherit;\">${tituloArrays[1] || \"\"}</h1>\n  `;\n\n  // Remove vírgulas, pontos ou espaços no início de cada string\n  function limparTexto(texto) {\n    if (!texto) return \"\";\n    return texto\n      .replace(/^[,\\.\\s]+/, \"\")\n      .replace(/\\s+/g, \" \")\n      .trim();\n  }\n\n  // ================= PREVIA HTML =================\n  let previaHtml = `\n  <!--Previa-->\n  `;\n\n  let previa0 = limparTexto(previa[0]);\n  let previa1 = limparTexto(previa[1]);\n  let previa2 = limparTexto(previa[2]);\n  let previa3 = limparTexto(previa[3]);\n\n  // === Ordem conforme a imagem ===\n\n  // Roteiro\n  if (previa1) {\n    previaHtml += `\n      <span style=\"font-size: 12pt;\">\n      <strong style=\"font-style: italic;\">Roteiro: </strong></span>\n      <span dir=\"auto\" style=\"vertical-align: inherit;\"><em>${previa1}</em></span><br>\n    `;\n  }\n\n // Saídas\nif (previa3) {\n  previaHtml += `\n    <span style=\"font-size: 12pt;\"><strong>Saídas:</strong></span>\n    <span dir=\"auto\">${previa3}</span><br>\n  `;\n} else {\n  // 🔥 Template padrão quando não houver previa3\n  previaHtml += `\n    <span style=\"font-size: 12pt;\"><strong>Saídas:</strong></span>\n    <span dir=\"auto\">conforme o calendário de partidas</span><br>\n  `;\n}\n\n  // Mínimo de participantes\n  if (previa2) {\n    previaHtml += `\n      <span dir=\"auto\"><strong style=\"font-style: italic;\">${previa2}</strong></span><br>\n    `;\n  }\n\n  // ================= RESULTADO FINAL =================\n  results.push({\n    json: {\n      ...data,              // 👉 garante que absolutamente TUDO do input será preservado\n      titulo,\n      tituloAHtml,\n      previaHtml,\n      \n      // arrays repassados\n      previaArray: previa,\n      tituloArray: tituloArrays,\n      itinerarioArray,\n      observacoesArray,\n      documentosArray,\n      incluiArray,\n      naoIncluiArray,\n      naoIncluiParsed,   // 🔥 agora sempre preservado\n      hoteisArray,\n      calendarioArray,\n\n      // cidades incluídas corretamente\n      cidades,\n\n      // mapa automático incluído\n      mapa_automatico: mapaAutomatico\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5760,
+        -1200
+      ],
+      "id": "9305adf9-208f-457c-a2c8-91ccb9fed388",
+      "name": "Template html - titulo e previa ",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens que chegam ao Code Node (cada item é um roteiro diferente)\nconst allItems = $input.all();\nlet results = [];\n\nfor (const item of allItems) {\n\n  const data = item.json;\n\n  // Arrays principais\n  const observacoesParsed = data.observacoesParsed || [];\n\n  // ============================\n  // 🔵 Montagem do HTML das OBSERVAÇÕES\n  // ============================\n\n  let ObservacoesHtml = `\n<!--Observações-->  \n<br><span style=\"font-family: Helvetica; font-size:12pt;\"><strong><em>\nObservações:</em></strong></span><br>\n  `;\n\n  for (const bloco of observacoesParsed) {\n    const titulo = bloco.titulo && bloco.titulo.trim() ? bloco.titulo.trim() : null;\n    const itens = Array.isArray(bloco.itens) ? bloco.itens : [];\n\n    // SE TIVER TÍTULO → aplica formato \"Na China:\" ou \"No Japão:\"\n    if (titulo) {\n      ObservacoesHtml += `\n<span style=\"font-family: Helvetica; font-size:12pt;\"><strong>${titulo}:</strong></span><br>\n      `;\n    }\n\n    // Lista de itens desse bloco\n    itens.forEach(it => {\n      if (!it || !it.trim()) return;\n\n      ObservacoesHtml += `\n[icon color=\"Extra-Color-1\" Animation_speed=\"Slow\" size=\"tiny\" icon_size=\"\" Animation_delay=\"\" image=\"fa-chevron-right\"] ${it.trim()}<br>\n      `;\n    });\n\n    ObservacoesHtml += `<br>`; // uma quebra entre blocos\n  }\n\n  // ============================\n  // 🔵 RESULTADO FINAL — TUDO PRESERVADO + HTMLs\n  // ============================\n  results.push({\n    json: {\n      ...data,\n\n      ObservacoesHtml,\n\n      observacoesParsed,\n      observacoesArray: data.observacoesArray || [],\n\n      itinerarioHtml: data.itinerarioHtml || \"\",\n      itinerarioArray: data.itinerarioArray || [],\n\n      documentosArray: data.documentosArray || [],\n      documentosHtml: data.documentosHtml || \"\",\n\n      incluiArray: data.incluiArray || [],\n      naoIncluiArray: data.naoIncluiArray || [],\n      hoteisArray: data.hoteisArray || [],\n      calendarioArray: data.calendarioArray || [],\n\n      cidades: data.cidades || [],\n      mapa_automatico: data.mapa_automatico || null\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5296,
+        -1200
+      ],
+      "id": "d4fa1db3-a32d-417d-b2ad-95e9c1c4d3f4",
+      "name": "Template html - Observaçoes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens que chegam ao Code Node (cada item é um roteiro diferente)\nconst allItems = $input.all();\nlet results = [];\n\n// Fallback caso documentosArray venha vazio\nconst fallbackDocs = $input.first().json.documentosArray || [];\n\n// ------------------------------\n// Funções utilitárias\n// ------------------------------\nfunction normalizeText(value) {\n  if (value == null) return \"\";\n  if (typeof value === \"string\") return value.trim();\n  if (typeof value === \"number\" || typeof value === \"boolean\") return String(value).trim();\n  if (Array.isArray(value)) {\n    return value.map(v => normalizeText(v)).filter(Boolean).join(\" \");\n  }\n  if (typeof value === \"object\") {\n    const keys = [\"text\",\"texto\",\"conteudo\",\"conteúdo\",\"titulo\",\"titulo_text\",\"item\",\"itens\",\"descricao\",\"description\",\"value\"];\n    for (const k of keys) {\n      if (k in value && value[k] != null) {\n        const t = normalizeText(value[k]);\n        if (t) return t;\n      }\n    }\n    const vals = Object.values(value).map(v => normalizeText(v)).filter(Boolean);\n    if (vals.length) return vals.join(\" \");\n    try { return JSON.stringify(value); } catch(e){ return \"\"; }\n  }\n  return \"\";\n}\n\nfunction isComEstrelaText(text) {\n  if (!text) return false;\n  const t = text.toLowerCase().replace(/\\s+/g, \"\");\n  return t === \"comestrela\" || t === \"titulo:comestrela\" || /^titulo[:\\s]*comestrela$/i.test(text);\n}\n\n// ------------------------------\n// PROCESSAMENTO\n// ------------------------------\nfor (const item of allItems) {\n  const data = item.json;\n\n  // RECEBE TUDO, COMPLETO\n  const documentosArray = data.documentosArray?.length ? data.documentosArray : fallbackDocs;\n\n  const observacoesParsed = data.observacoesParsed || [];\n\n  // --------------------------\n  // 🔷 HTML das OBSERVAÇÕES\n  // --------------------------\n  let ObservacoesHtml = `\n<!--Observações-->  \n<br><span style=\"font-family: Helvetica; font-size:12pt;\"><strong><em>\nObservações:</em></strong></span><br>\n  `;\n\n  for (const bloco of observacoesParsed) {\n    const titulo = bloco.titulo?.trim() || null;\n    const itens = Array.isArray(bloco.itens) ? bloco.itens : [];\n\n    if (titulo) {\n      ObservacoesHtml += `\n<span style=\"font-family: Helvetica; font-size:12pt;\"><strong>${titulo}:</strong></span><br>`;\n    }\n\n    itens.forEach(it => {\n      if (!it?.trim()) return;\n      ObservacoesHtml += `\n[icon color=\"Extra-Color-1\" Animation_speed=\"Slow\" size=\"tiny\" image=\"fa-chevron-right\"] ${it.trim()}<br>`;\n    });\n\n    ObservacoesHtml += `<br>`;\n  }\n\n  // --------------------------\n  // 🔷 HTML dos DOCUMENTOS\n  // --------------------------\n  let documentosHtml = `\n<!--Documentos-->  \n<br><span style=\"font-size: 12pt; font-family: Helvetica;\">\n   <em><strong>Documentos necessários para portadores de passaporte brasileiro:</strong></em>\n</span><br>\n  `;\n\n  documentosArray.forEach((doc) => {\n\n    // Bloco com títulos e itens (comestrela style)\n    if (doc && typeof doc === \"object\" && Array.isArray(doc.itens)) {\n      const blocoTitulo = normalizeText(doc.titulo || \"\");\n\n      if (blocoTitulo && !isComEstrelaText(blocoTitulo)) {\n        documentosHtml += `\n<br><span style=\"font-size: 11pt; font-family: Helvetica;\"><strong>${blocoTitulo}</strong></span><br>`;\n      }\n\n      doc.itens.forEach(it => {\n        const t = normalizeText(it);\n        if (t) documentosHtml += `<br>* ${t}`;\n      });\n\n      return;\n    }\n\n    // Objeto com itens simples\n    if (doc && typeof doc === \"object\" && doc.itens && !Array.isArray(doc.itens)) {\n      const blocoTitulo = normalizeText(doc.titulo || \"\");\n      if (blocoTitulo && !isComEstrelaText(blocoTitulo)) {\n        documentosHtml += `\n<br><span style=\"font-size: 11pt; font-family: Helvetica;\"><strong>${blocoTitulo}</strong></span><br>`;\n      }\n\n      const t = normalizeText(doc.itens);\n      if (t) documentosHtml += `* ${t}<br>`;\n      return;\n    }\n\n    // Caso normal\n    const text = normalizeText(doc);\n    if (!text || isComEstrelaText(text)) return;\n\n    if (/^titulo:/i.test(text)) {\n      documentosHtml += `\n<br><span style=\"font-size: 11pt; font-family: Helvetica;\">\n<strong>${text.replace(/^titulo:/i, \"\").trim()}</strong>\n</span><br>`;\n      return;\n    }\n\n    documentosHtml += `\n<span style=\"vertical-align: inherit;\">\n   [icon color=\"Extra-Color-1\" size=\"tiny\" image=\"fa-check-square-o\"] ${text}\n</span><br>`;\n  });\n\n  // --------------------------\n  // RETORNO FINAL — TUDO PRESERVADO\n  // --------------------------\n  results.push({\n    json: {\n      ...data,                // <<<<<<– AGORA NADA SE PERDE!\n\n      ObservacoesHtml,\n      documentosHtml,\n\n      observacoesParsed,\n      documentosArray\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5744,
+        -944
+      ],
+      "id": "06e89776-3dec-44e1-a70d-94354dbe94fb",
+      "name": "Template html - Documentos "
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens que chegam ao Code Node (cada item é um roteiro diferente)\nconst allItems = $input.all();\nlet results = [];\n\n// ------------------------------\n// PROCESSAMENTO\n// ------------------------------\nfor (const item of allItems) {\n\n  // 🔵 RECEBE TUDO DO NODE ANTERIOR\n  const data = item.json;\n\n  const incluiParsed = data.incluiParsed || [];\n\n  // ---------------------------\n  // 🔵 MONTAR O HTML DO INCLUI \n  // ---------------------------\n  let incluiHtml = `\n<!--Inclui-->  \n<br><br><span style=\"font-size: 12pt; font-family: Helvetica;\">\n   <em><strong>Inclui:</strong></em>\n</span><br>\n`;\n\n  incluiParsed.forEach((bloco, index) => {\n\n    if (!bloco) return;\n\n    // 🔹 TÍTULO DO BLOCO (exceto o bloco 0 → Pacote Inclui)\n    if (bloco.titulo && !(index === 0 && /^pacote inclui$/i.test(bloco.titulo))) {\n      incluiHtml += `\n<br><span style=\"font-size: 11pt; font-family: Helvetica;\">\n   <strong>${bloco.titulo}</strong>\n</span><br>`;\n    }\n\n    // 🔹 ITENS DO BLOCO\n    if (Array.isArray(bloco.itens)) {\n      bloco.itens.forEach((item) => {\n        if (!item || !item.toString().trim()) return;\n\n        const text = item.toString().trim();\n\n        incluiHtml += `\n[icon color=\"Extra-Color-1\" Animation_speed=\"Slow\" size=\"tiny\" \n image=\"fa fa-check\"] ${text}<br>`;\n      });\n    }\n\n  });\n\n  // ---------------------------\n  // 🔵 RETORNO FINAL — TUDO PRESERVADO\n  // ---------------------------\n  results.push({\n    json: {\n      ...data,      // <<<<<<— AGORA NADA É PERDIDO !!\n\n      incluiHtml,   // adicionamos só o novo campo\n      incluiParsed  // mantemos o original também\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5504,
+        -944
+      ],
+      "id": "f1c88231-fd3a-4f28-bbe7-5d0cabdb938e",
+      "name": "Template html - Inclui"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens que chegam ao Code Node (cada item é um roteiro diferente)\nconst allItems = $input.all();\nlet results = [];\n\nfor (const item of allItems) {\n\n  // 🔵 RECEBE TUDO DO NODE ANTERIOR\n  const data = item.json;\n\n  const titulo = data.titulo;\n\n  const observacoesArray = data.observacoesArray || [];\n  const ObservacoesHtml = data.ObservacoesHtml || \"\";\n\n  const previa = data.previaArray || [];\n  const previaHtml = data.previaHtml || \"\";\n\n  const tituloArrays = data.tituloArray || [];\n  const tituloHtml = data.tituloHtml || \"\";\n\n  const itinerarioArray = data.itinerarioArray || [];\n  const itinerarioHtml = data.itinerarioHtml || \"\";\n\n  const documentosArray = data.documentosArray || [];\n  const documentosHtml = data.documentosHtml || \"\";\n\n  const incluiParsed = data.incluiParsed || [];\n  const incluiHtml = data.incluiHtml || \"\";\n\n  const naoIncluiParsed = data.naoIncluiParsed || [];\n\n  const hoteisArray = data.hoteisArray || [];\n  const calendarioArray = data.calendarioArray || [];\n\n  // ---------------------------\n  // 🔵 MONTAR HTML DO NÃO INCLUI — DEFINITIVO\n  // ---------------------------\n\n  let naoIncluiHtml = `\n<!--nao inclui-->  \n<br><br><span style=\"font-size: 12pt; font-family: Helvetica;\">\n   <em><strong>Não Inclui:</strong></em>\n</span><br>\n`;\n\n  naoIncluiParsed.forEach((incItem) => {\n    if (!incItem || !Array.isArray(incItem.itens)) return;\n\n    incItem.itens.forEach((text, itemIndex) => {\n      if (!text) return;\n\n      // Ignora item 0 → \"Pacote Não Inclui.\"\n      if (itemIndex === 0) return;\n\n      text = String(text).trim();\n      if (!text) return;\n\n      // ------------------------------\n      // 🟦 DETECÇÃO DE SUBTÍTULOS\n      // ------------------------------\n      const isSubTitulo =\n        text.includes(\"Na China\") ||\n        text.includes(\"No Japão\") ||\n        /^No\\s+.+:/.test(text) ||\n        /^Na\\s+.+:/.test(text);\n\n      if (isSubTitulo) {\n        naoIncluiHtml += `\n<br><span style=\"font-size: 12pt;\"><strong>${text}</strong></span><br>\n        `;\n        return;\n      }\n\n      // ------------------------------\n      // 🔽 Itens normais\n      // ------------------------------\n      naoIncluiHtml += `\n[icon color=\"Extra-Color-1\" Animation_speed=\"Slow\" size=\"tiny\" icon_size=\"\" Animation_delay=\"\" image=\"fa-times\"] ${text}<br>\n      `;\n    });\n  });\n\n  // ---------------------------\n  // 🔵 RETORNO FINAL — NADA É PERDIDO\n  // ---------------------------\n  results.push({\n    json: {\n      ...data,           // <<<<<< — SALVA TUDO DO NODE ANTERIOR\n      naoIncluiHtml,     // adicionamos o campo novo\n      naoIncluiParsed    // preservamos o original\n    }\n  });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5280,
+        -944
+      ],
+      "id": "7eb6bee5-ca15-4f90-8fbe-f68a9b8de4a8",
+      "name": "Template html - NaoInclui"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nlet results = [];\n\n// ============================================================\n// 1. HELPERS: PARSER E FORMATAÇÃO\n// ============================================================\n\nfunction parseHtmlTableToMatrix(htmlString) {\n  const rows = [];\n  const cleanHtml = htmlString.replace(/[\\r\\n]+/g, \" \");\n  const rowMatches = cleanHtml.match(/<tr[^>]*>[\\s\\S]*?<\\/tr>/gi) || [];\n  \n  for (const rowHtml of rowMatches) {\n    const rowData = [];\n    const cellMatches = rowHtml.match(/<(td|th)[^>]*>[\\s\\S]*?<\\/\\1>/gi) || [];\n    for (const cell of cellMatches) {\n      let text = cell.replace(/<[^>]+>/g, \"\").trim();\n      text = text.replace(/&nbsp;/g, \" \");\n      rowData.push(text);\n    }\n    if (rowData.length > 0) rows.push(rowData);\n  }\n  return rows;\n}\n\nfunction formatarTexto(texto) {\n  if (!texto) return \"\";\n  // Formata datas (Mês/Ano:) e quebra linha para visual limpo\n  const regexData = /([A-Za-zç]+\\/\\d{4}):/g;\n  if (regexData.test(texto)) {\n     return texto.replace(/([A-Za-zç]+\\/\\d{4}:)/g, \"<br><strong>$1</strong>\");\n  }\n  return texto;\n}\n\nfunction extractDatesSimple(matrix) {\n    const dates = [];\n    for (let row of matrix) {\n        const cell = row.find(c => (/\\d/.test(c) || /\\//.test(c)) && c.length > 5 && !c.toUpperCase().includes(\"SAÍDA\"));\n        if (cell) dates.push(cell);\n    }\n    return dates;\n}\n\n// ============================================================\n// 2. PROCESSAMENTO PRINCIPAL\n// ============================================================\nfor (const item of allItems) {\n  const original = item.json;\n  let calendarioHtml = \"\";\n  \n  let allMatrices = [];\n\n  // Extração das matrizes\n  if (original.calendarios && Array.isArray(original.calendarios)) {\n     if (original.calendarios[0] && original.calendarios[0].linhas) {\n        allMatrices = original.calendarios.map(c => c.linhas);\n     } else {\n        allMatrices = [original.calendarios]; \n     }\n  } else {\n     const jsonStr = JSON.stringify(original);\n     const tableMatches = jsonStr.match(/<table[^>]*>([\\s\\S]*?)<\\/table>/gi) || [];\n     allMatrices = tableMatches.map(t => parseHtmlTableToMatrix(t));\n  }\n\n  // --- VARIÁVEIS DE RESULTADO ---\n  let seasonPairs = []; \n  let stdDates = [];    \n  let supDates = [];    \n  let validadeDates = []; \n  \n  let dynamicHeader = \"DATAS DE SAÍDA\"; \n\n  // --- LOOP DE ANÁLISE ---\n  for (const matrix of allMatrices) {\n      if (matrix.length < 2) continue;\n\n      const fullText = JSON.stringify(matrix).toUpperCase();\n\n      // =========================================================\n      // [NOVO] FILTRO ANTI-LIXO (SERVIÇOS OPCIONAIS)\n      // =========================================================\n      // Verifica as 3 primeiras linhas em busca de termos que indicam tabela de preço opcional\n      const headerCheck = matrix.slice(0, 3).map(r => r.join(\" \").toUpperCase()).join(\" \");\n      \n      const termosProibidos = [\n          \"SERVIÇOS OPCIONAIS\", \"SERVICOS OPCIONAIS\", \n          \"SERVIÇO OPCIONAL\", \"SERVICO OPCIONAL\",\n          \"MEIA PENSÃO\", \"PENSÃO COMPLETA\", \"PENSAO COMPLETA\",\n          \"SUPLEMENTO\", \"OPCIONAIS -\"\n      ];\n\n      // Se tiver termo proibido e NÃO tiver a palavra \"SAÍDA\" ou \"PARTIDA\" explícita no mesmo cabeçalho, pula.\n      if (termosProibidos.some(termo => headerCheck.includes(termo)) && !headerCheck.includes(\"SAÍDA\") && !headerCheck.includes(\"PARTIDA\")) {\n          continue; \n      }\n      \n      // Filtro extra: Se tiver \"Período\" e \"Standard\" mas não tiver \"Saída\", provavelmente é tabela de preço\n      if (headerCheck.includes(\"PERÍODO\") && headerCheck.includes(\"STANDARD\") && !headerCheck.includes(\"SAÍDA\")) {\n          continue;\n      }\n\n      let captured = false; \n\n      // ---------------------------------------------------------\n      // 1. [NOVO] DETECÇÃO POR PADRÃO DE CONTEÚDO (Datas e Intervalos)\n      // ---------------------------------------------------------\n      let dateColIndex = -1;\n      \n      // AJUSTE: Procura coluna que tem Mês/Ano: OU formato Dia/Mês OU Dia de Mês\n      for(let r = 0; r < Math.min(10, matrix.length); r++) {\n         const row = matrix[r];\n         const foundIdx = row.findIndex(c => {\n             if (!c || c.length < 5) return false;\n             \n             // Padrão 1: Abril/2025:\n             const isStandard = /[A-Za-zç]+\\/\\d{4}:/.test(c);\n             \n             // Padrão 2: 01/Novembro a ... (Começa com dia/mês e tem range)\n             // O Regex `[\\s\\/]+` aceita barra ou espaço (01/Nov ou 01 Nov)\n             const hasDateStart = /\\d{1,2}[\\s\\/]+[A-Za-zç]+/.test(c);\n             const hasRangeMarkers = (c.includes(\" a \") || c.includes(\"/20\") || c.includes(\" e \"));\n             \n             // Anti-ruído: não pode ter \"participante\" (evita pegar coluna de preços)\n             const isNotNoise = !c.toLowerCase().includes(\"participante\");\n\n             return (isStandard || (hasDateStart && hasRangeMarkers)) && isNotNoise;\n         });\n\n         if (foundIdx !== -1) {\n            dateColIndex = foundIdx;\n            break;\n         }\n      }\n\n      if (dateColIndex !== -1) {\n         // --- DETECÇÃO DE CABEÇALHO DINÂMICO ---\n         for (let i = 0; i < Math.min(3, matrix.length); i++) {\n             const candidate = (matrix[i][dateColIndex] || \"\").trim();\n             if (/sa[ií]das?|partidas?|di[áa]rias?|semanais|segunda|terça|quarta|quinta|sexta|s[áa]bado|domingo/i.test(candidate)) {\n                 dynamicHeader = candidate; \n                 matrix[i][dateColIndex] = \"IGNORE_HEADER\"; \n                 break; \n             }\n         }\n\n         // --- EXTRAÇÃO DOS DADOS ---\n         for (let row of matrix) {\n            const txt = row[dateColIndex];\n            \n            if (!txt || txt === \"IGNORE_HEADER\") continue;\n            \n            // Filtros de lixo\n            if (txt.toUpperCase().includes(\"SINGLE\")) continue;\n            if (txt.toUpperCase().includes(\"DUPLO\")) continue;\n            if (txt.toUpperCase().includes(\"TRIPLO\")) continue;\n            if (txt.toLowerCase().includes(\"participante\")) continue; // Proteção extra\n            \n            // Validações de Formato\n            const isStandardDate = /[A-Za-zç]+\\/\\d{4}:/.test(txt);\n            \n            // Regex ajustado: Aceita \"01 Novembro\" (Espaço) ou \"01/Novembro\" (Barra)\n            const isRangeDate = /\\d{1,2}[\\s\\/]+[A-Za-zç]+/.test(txt) && txt.length > 5 && (txt.includes(\" a \") || txt.includes(\"/20\"));\n            \n            const isLooseDate = /\\d{2}\\/\\d{2}/.test(txt) && txt.length > 5;\n\n            if (isStandardDate || isRangeDate || isLooseDate) {\n               // DEDUPLICAÇÃO:\n               // Evita adicionar a mesma data duas vezes seguidas (comum quando a data ocupa várias linhas na tabela original)\n               const lastItem = seasonPairs[seasonPairs.length - 1];\n               if (lastItem && lastItem.date === txt) {\n                   continue;\n               }\n\n               seasonPairs.push({ group: \"Auto\", date: txt });\n               captured = true;\n            }\n         }\n      }\n\n      if (captured) continue; \n\n      // ---------------------------------------------------------\n      // 2. [ANTIGO] DETECÇÃO POR CABEÇALHO EXPLÍCITO\n      // ---------------------------------------------------------\n      let idxTemp = -1;\n      let idxSaida = -1;\n      let headerRow = -1;\n\n      for(let i=0; i<Math.min(5, matrix.length); i++) {\n          const rowStr = matrix[i].map(c => c.toUpperCase());\n          if (rowStr.includes(\"TEMPORADA\") || rowStr.some(c => c.includes(\"GRUPOS\"))) idxTemp = matrix[i].findIndex(c => c.toUpperCase().includes(\"TEMPORADA\") || c.toUpperCase().includes(\"GRUPO\"));\n          if (rowStr.some(c => c.includes(\"SAÍDA\") || c.includes(\"SAIDA\"))) idxSaida = matrix[i].findIndex(c => c.toUpperCase().includes(\"SAÍDA\") || c.toUpperCase().includes(\"SAIDA\"));\n          \n          if (idxTemp !== -1 && idxSaida !== -1) {\n              headerRow = i;\n              break;\n          }\n      }\n\n      if (idxTemp !== -1 && idxSaida !== -1) {\n          for (let i = headerRow + 1; i < matrix.length; i++) {\n              const group = matrix[i][idxTemp];\n              const date = matrix[i][idxSaida];\n              if (group && group.trim().length > 0 && date && (/\\d/.test(date) || date.length > 5)) {\n                  seasonPairs.push({ group: group, date: date });\n                  captured = true;\n              }\n          }\n      }\n      \n      if (captured) continue;\n\n      // ---------------------------------------------------------\n      // 3. [ANTIGO] FALLBACKS\n      // ---------------------------------------------------------\n      if (fullText.includes(\"STANDARD\") && fullText.includes(\"SUPERIOR\")) {\n          const dates = extractDatesSimple(matrix);\n          if (dates.length > 0) stdDates = dates; \n      }\n      else if (fullText.includes(\"VALIDADE\")) {\n          for (let row of matrix) {\n             const cell = row.find(c => String(c).length > 10 && !c.toUpperCase().includes(\"VALIDADE\") && /\\d/.test(c));\n             if (cell) validadeDates.push(cell);\n          }\n      }\n  }\n\n  // ============================================================\n  // GERADOR DE HTML\n  // ============================================================\n\n  if (seasonPairs.length > 0) {\n      let rowsHtml = \"\";\n      const alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\";\n\n      seasonPairs.forEach((item, index) => {\n          let label = \"\";\n          if (item.group === \"Auto\" || item.group === \"Saída\" || !item.group) {\n              label = alphabet[index] || (index + 1); \n          } else {\n              label = item.group;\n          }\n          \n          rowsHtml += `\n            <tr>\n                <td style=\"text-align:center; font-weight:bold; width: 10%; vertical-align: middle;\">${label}</td>\n                <td style=\"padding:10px; text-align:left; vertical-align: middle;\">${formatarTexto(item.date)}</td>\n            </tr>`;\n      });\n      \n      calendarioHtml = buildTable(\"GRUPOS\", dynamicHeader, null, rowsHtml);\n  }\n  \n  else if (stdDates.length > 0) {\n      let rowsHtml = \"\";\n      const alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\";\n      for (let i = 0; i < stdDates.length; i++) {\n          const label = alphabet[i] || (i + 1);\n          rowsHtml += `\n            <tr>\n                <td style=\"text-align:center; font-weight:bold;\">${label}</td>\n                <td style=\"padding:8px; text-align:center;\">${formatarTexto(stdDates[i])}</td>\n            </tr>`;\n      }\n      calendarioHtml = buildTable(\"GRUPOS\", \"SAÍDAS PREVISTAS\", null, rowsHtml);\n  }\n  \n  else if (validadeDates.length > 0) {\n      let rowsHtml = `<tr><td style=\"padding:15px; text-align:center;\">${formatarTexto(validadeDates[0])}</td></tr>`;\n      calendarioHtml = buildTable(null, \"PERÍODO DE VALIDADE\", null, rowsHtml);\n  }\n\n  results.push({\n    json: {\n      ...original,\n      calendarioHtml: calendarioHtml || \"\"\n    }\n  });\n}\n\nfunction buildTable(col1, col2, col3, rows) {\n    const header1 = col1 ? `<th style=\"text-align:center; padding:8px; background-color:#f4f4f4;\">${col1}</th>` : \"\";\n    const header3 = col3 ? `<th style=\"text-align:center; padding:8px; background-color:#f4f4f4;\">${col3}</th>` : \"\";\n    const col2Attr = col1 ? \"\" : \"width='100%'\";\n\n    return `\n    <div style=\"flex:1 1 48%; min-width:320px; margin-bottom: 20px;\">\n        <h3 style=\"color: #ff6600; font-family: Helvetica; font-size: 18pt; text-align: center; margin-bottom: 10px;\">\n        <strong>CALENDÁRIO DE PARTIDAS</strong>\n        </h3>\n        <table width=\"100%\" border=\"1\" style=\"border-collapse:collapse; font-family:Helvetica; border-color:#ccc; font-size:14px;\">\n            <thead>\n                <tr style=\"background-color:#f4f4f4;\">\n                    ${header1}\n                    <th ${col2Attr} style=\"text-align:center; padding:10px;\">${col2}</th>\n                    ${header3}\n                </tr>\n            </thead>\n            <tbody>\n                ${rows}\n            </tbody>\n        </table>\n    </div>`;\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5744,
+        -704
+      ],
+      "id": "cb03b70c-5799-44e9-a31f-25a2c798c7bf",
+      "name": "Template Html - Calendario de partidas"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ======================== GERA HTML DE HOTÉIS (CORRIGIDO: MESCLA VAZIOS) =========================\n\nconst allItems = $input.all();\nlet results = [];\n\n// Função para limpar texto\nfunction normalize(s) {\n  return String(s || \"\")\n    .replace(/\\u00A0/g, \" \")\n    .replace(/[\\r\\n]+/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\n// Função para definir prioridade de exibição das colunas\nfunction getColumnPriority(key) {\n  const lower = key.toLowerCase();\n  if (lower.includes(\"standard\")) return 1;\n  if (lower.includes(\"superior\")) return 2;\n  if (lower.includes(\"luxo\")) return 3;\n  if (lower.includes(\"deluxe\")) return 4;\n  if (lower.includes(\"hotel\")) return 5;\n  if (lower.includes(\"opção\") || lower.includes(\"opcao\")) return 10; \n  return 100;\n}\n\nfor (const item of allItems) {\n  const data = item.json.hoteisNormalized || {};\n  const cidades = Array.isArray(data.cidades) ? data.cidades : [];\n\n  // --- 1. Aviso de sem dados ---\n  if (!cidades.length) {\n    results.push({\n      json: {\n        ...item.json,\n        hoteisHtml: `\n        <h3 style=\"text-align:center; color:#ff6600; font-family:Helvetica; font-size:18pt;\">\n          <strong>HOTÉIS PREVISTOS OU SIMILARES</strong>\n        </h3>\n        <p style=\"text-align:center;\"><em>Nenhuma informação disponível.</em></p>\n        `\n      }\n    });\n    continue;\n  }\n\n  // --- 2. Descobrir colunas dinâmicas ---\n  let foundKeys = new Set();\n  cidades.forEach(c => {\n    if (Array.isArray(c.standard) && c.standard.length) foundKeys.add(\"Standard\");\n    if (Array.isArray(c.superior) && c.superior.length) foundKeys.add(\"Superior\");\n    if (c.outrasOpcoes) {\n      Object.keys(c.outrasOpcoes).forEach(k => foundKeys.add(k));\n    }\n  });\n\n  if (foundKeys.size === 0) foundKeys.add(\"Hotel\");\n\n  const columns = Array.from(foundKeys).sort((a, b) => {\n    const pA = getColumnPriority(a);\n    const pB = getColumnPriority(b);\n    if (pA !== pB) return pA - pB;\n    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });\n  });\n\n  // --- 3. Cabeçalho ---\n  const headerColsHtml = columns.map(colName => \n    `<th style=\"text-align:center; padding:10px;\">${colName}</th>`\n  ).join(\"\");\n\n  // --- 4. Linhas com Lógica de Mesclagem Otimizada ---\n  const linhasHtml = cidades.map((c, index) => {\n    const cidade = normalize(c.cidade);\n    const noites = normalize(c.noites);\n    const bgColor = index % 2 === 0 ? \"#ffffff\" : \"#f9f9f9\";\n\n    // 4.1 Prepara valores\n    let rowValues = columns.map(colKey => {\n      let val = \"\";\n      const keyLower = colKey.toLowerCase();\n      if (c[keyLower] && Array.isArray(c[keyLower])) {\n        val = c[keyLower][0];\n      } else if (c.outrasOpcoes && c.outrasOpcoes[colKey]) {\n        val = c.outrasOpcoes[colKey][0];\n      }\n      return normalize(val);\n    });\n\n    // 4.2 Lógica de Mesclagem (COLSPAN)\n    let cellsHtml = \"\";\n    const nonEmptyValues = rowValues.filter(v => v !== \"\");\n    const uniqueValues = [...new Set(nonEmptyValues)];\n\n    // CENÁRIO A: Valor Único Global (Centraliza tudo)\n    // Ex: Só tem \"Hotel X\" preenchido em uma coluna e as outras 2 estão vazias -> Ocupa tudo.\n    if (uniqueValues.length === 1 && columns.length > 1 && nonEmptyValues.length > 0) {\n       cellsHtml = `<td colspan=\"${columns.length}\" style=\"text-align:center; padding:8px; vertical-align: middle;\">${uniqueValues[0]}</td>`;\n    } \n    else {\n      // CENÁRIO B: Mesclagem Inteligente (Conquista Vizinhos Vazios)\n      for (let i = 0; i < rowValues.length; i++) {\n        let txt = rowValues[i];\n        let spanCount = 1;\n\n        // Loop: Olha para a direita.\n        // Mescla se: O próximo for IGUAL ao atual OU se o próximo for VAZIO (e o atual não)\n        while (\n            i + spanCount < rowValues.length && \n            (\n                rowValues[i + spanCount] === txt || \n                (txt !== \"\" && rowValues[i + spanCount] === \"\")\n            )\n        ) {\n          spanCount++;\n        }\n\n        if (spanCount > 1) {\n          cellsHtml += `<td colspan=\"${spanCount}\" style=\"text-align:center; padding:8px; vertical-align: middle;\">${txt}</td>`;\n          i += (spanCount - 1); \n        } else {\n          cellsHtml += `<td style=\"text-align:center; padding:8px; vertical-align: middle;\">${txt}</td>`;\n        }\n      }\n    }\n\n    return `\n      <tr style=\"background-color: ${bgColor};\">\n        <td style=\"text-align:center; padding:8px; vertical-align: middle; font-weight:bold;\">${cidade}</td>\n        <td style=\"text-align:center; padding:8px; vertical-align: middle;\">${noites}</td>\n        ${cellsHtml}\n      </tr>\n    `;\n  }).join(\"\");\n\n  // --- 5. HTML Final ---\n  const hoteisHtml = `\n  <div style=\"flex: 1 1 48%; min-width: 320px; box-sizing: border-box; margin-bottom: 20px;\">\n    <h3 style=\"text-align:center; color:#ff6600; font-family:Helvetica; font-size:18pt; margin-bottom:10px;\">\n      <strong>HOTÉIS PREVISTOS OU SIMILARES</strong>\n    </h3>\n\n    <table width=\"100%\" border=\"1\" style=\"border-collapse:collapse; font-family:Helvetica; border-color:#ccc; font-size:14px;\">\n      <thead style=\"background-color:#f4f4f4;\">\n        <tr>\n          <th style=\"text-align:center; padding:10px; width:20%;\">Cidade</th>\n          <th style=\"text-align:center; padding:10px; width:10%;\">Noites</th>\n          ${headerColsHtml}\n        </tr>\n      </thead>\n      <tbody>\n        ${linhasHtml}\n      </tbody>\n    </table>\n  </div>\n  `;\n\n  results.push({\n    json: {\n      ...item.json,\n      hoteisHtml\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5488,
+        -704
+      ],
+      "id": "e25d6497-6fb4-44d4-975a-ade1c4d6f724",
+      "name": "Organizando - hoteis "
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==================== TRATAMENTO FINAL DE HTML ====================\n\nconst allItems = $input.all();\nlet results = [];\n\n// Função para limpar HTMLs removendo \\n, \\r e múltiplos espaços\nfunction limparHtml(html) {\n  if (!html) return \"\";\n  return String(html)\n    .replace(/\\\\n|\\\\r/g, \" \")    // remove \\n e \\r literais\n    .replace(/[\\n\\r]+/g, \" \")    // remove quebras reais\n    .replace(/\\s{2,}/g, \" \")     // remove espaços duplos+\n    .replace(/\\s*>/g, \">\")       // remove espaços antes de >\n    .replace(/<\\s+/g, \"<\")       // remove espaços depois de <\n    .trim();\n}\n\nconst CAMPOS_HTML = [\n  \"tituloAHtml\",\n  \"previaHtml\",\n  \"itinerarioHtml\",\n  \"ObservacoesHtml\",\n  \"documentosHtml\",\n  \"incluiHtml\",\n  \"naoIncluiHtml\",\n  \"calendarioHtml\",\n  \"hoteisHtml\",\n  \"itinerarioArray\"\n];\n\nfor (const item of allItems) {\n  const json = { ...item.json };\n\n  // 1) Limpa os campos HTML existentes\n  for (const campo of CAMPOS_HTML) {\n    if (json[campo]) {\n      json[campo] = limparHtml(json[campo]);\n    }\n  }\n\n  // 2) Monta o HTML final\n  let htmlFinal = `\n    <div style=\"display:flex; flex-wrap:wrap; justify-content:space-between; gap:20px;\">\n      ${json.hoteisHtml || \"\"}\n      ${json.calendarioHtml || \"\"}\n    </div>\n  `;\n\n  // 3) Limpa o htmlFinal também\n  json.htmlFinal = limparHtml(htmlFinal);\n\n  results.push({ json });\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5136,
+        -704
+      ],
+      "id": "e7504abb-a77b-48b0-b69f-5584ac601f23",
+      "name": "Removendo os /n /g"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code node -> Separa cidades e protege nomes compostos\nconst allItems = $input.all();\nlet results = [];\n\n// Proteção para nomes que não podem ser quebrados\nconst CIDADES_COMPOSTAS = [\n    \"Hong Kong\", \"New York\", \"Los Angeles\", \"San Francisco\", \n    \"Kuala Lumpur\", \"Ho Chi Minh\", \"Abu Dhabi\", \"Sri Lanka\",\n    \"Buenos Aires\", \"Rio de Janeiro\", \"São Paulo\", \"Cidade do Cabo\",\n    \"Phnom Penh\", \"Siem Reap\", \"Luang Prabang\", \"Tel Aviv\",\n    \"South Korea\", \"Coreia do Sul\"\n];\n\nfor (const item of allItems) {\n  const data = item.json;\n  const titulo = data.titulo || data.nome || null;\n  const itinerario = data.itinerarioArray || [];\n\n  const cidades = [];\n  const set = new Set(); \n\n  const processarTextoCidades = (textoBruto) => {\n      if (!textoBruto || typeof textoBruto !== 'string') return;\n\n      let textoLimpo = textoBruto;\n      textoLimpo = textoLimpo.replace(/\\.{2,}/g, \" \"); \n      textoLimpo = textoLimpo.replace(/[()]/g, \" \");   \n\n      // Cola nomes compostos\n      CIDADES_COMPOSTAS.forEach(composta => {\n          const safeComposta = composta.replace(\".\", \"\\\\.\");\n          const regex = new RegExp(safeComposta, \"gi\"); \n          if (regex.test(textoLimpo)) {\n              textoLimpo = textoLimpo.replace(regex, (match) => match.replace(/\\s+/g, \"_\"));\n          }\n      });\n\n      // Separa por barra, vírgula ou espaço\n      const partes = textoLimpo\n          .split(/[\\/,;\\s]+/) \n          .map(s => s.trim())\n          .filter(s => s && s.length > 2 && s !== \"...\" && !/^\\d+$/.test(s));\n\n      for (let p of partes) {\n          p = p.replace(/_/g, \" \"); // Devolve o espaço\n          p = p.replace(/^(Visitando|Chegada|Saída|Pernoite)[:\\s]*/i, \"\");\n\n          if (p && !set.has(p)) {\n              set.add(p);\n              cidades.push(p);\n          }\n      }\n  };\n\n  // 1. Processa Prévia\n  if (data.previaArray && Array.isArray(data.previaArray) && data.previaArray[1]) {\n      processarTextoCidades(String(data.previaArray[1]));\n  }\n\n  // 2. Processa Itinerário\n  for (const dia of itinerario) {\n    if (!dia) continue;\n    if (Array.isArray(dia.cidade)) {\n       dia.cidade.forEach(c => processarTextoCidades(c));\n    } else if (typeof dia.cidade === \"string\") {\n       processarTextoCidades(dia.cidade);\n    }\n  }\n\n  results.push({\n    json: {\n      ...data,\n      titulo,\n      cidades\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6800,
+        -928
+      ],
+      "id": "dc287f4b-5f33-43b0-96e9-3ae5411dfa24",
+      "name": "separando roteiro + cidade"
+    },
+    {
+      "parameters": {
+        "operation": "createFromText",
+        "content": "={{ $('Removendo os /n /g').item.json.tituloAHtml }}{{ $('Removendo os /n /g').item.json.previaHtml }}{{ $('Removendo os /n /g').item.json.itinerarioHtml }}{{ $('Removendo os /n /g').item.json.ObservacoesHtml }}{{ $('Removendo os /n /g').item.json.documentosHtml }}{{ $('Removendo os /n /g').item.json.incluiHtml }}{{ $('Removendo os /n /g').item.json.naoIncluiHtml }}{{ $('Removendo os /n /g').item.json.htmlFinal }}",
+        "name": "={{ $json.titulo }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "https://drive.google.com/drive/folders/SEU_GOOGLE_DRIVE_OUTPUT_FOLDER_ID",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -4784,
+        -704
+      ],
+      "id": "0943060c-1486-4fa5-a4ae-cec1fd2aaf60",
+      "name": "Create file from text1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "qyVgwbwm7VC4s5jW",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -8736,
+        -1104
+      ],
+      "id": "06eaa02b-e8a0-45ba-902d-615db193aa5d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all();\n\nfunction parseTitulo(t) {\n  if (!t) return [null, null, null];\n\n  const s = String(t).trim();\n\n  // 1) Primeiro tenta achar \"X dias\"\n  let match = s.match(/(\\d+\\s*dias?.*)/i);\n\n  // 2) Se não encontrar, tentar mês+ano (com ou sem espaço)\n  if (!match) {\n    match = s.match(/((Jan|Fev|Mar|Abr|Mai|Jun|Jul|Ago|Set|Out|Nov|Dez)\\s*\\d{4}.*)$/i);\n  }\n\n  if (match) {\n    const idx = s.indexOf(match[1]);\n\n    const nome = s\n      .slice(0, idx)\n      .trim()\n      .replace(/[-–—]\\s*$/, \"\")\n      .trim();\n\n    const info = s.slice(idx).trim();\n\n    return [s, nome, info];\n  }\n\n  // fallback\n  return [s, s, null];\n}\n\nconst out = input.map(item => {\n  const titulo = item.json.titulo || \"\";\n  item.json.tituloArray = parseTitulo(titulo);\n  return item;\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7536,
+        -1008
+      ],
+      "id": "42fb6e13-a039-44a6-9186-de455e917049",
+      "name": "NODE – Parse Título",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Entrada: lista de itens\nconst input = $input.all();\n\n// =================== PARSE DEFINITIVO (VERSÃO ROBUSTA) =====================\n\nfunction parsePrevia(input) {\n    if (!input) return [\"\", \"\", \"\", \"\"];\n\n    // Limpeza inicial\n    const full = String(input)\n        .replace(/\\r|\\n/g, \" \")\n        .replace(/\\s+/g, \" \")\n        .trim();\n\n    const arr = [full, \"\", \"\", \"\"];\n\n    // -------------------------------------------------------\n    // 1️⃣ Extrai MÍNIMO\n    // -------------------------------------------------------\n    const minMatch = full.match(/M[ií]nimo\\s+de\\s+\\d+\\s+participantes?/i);\n    if (minMatch) arr[2] = minMatch[0].trim();\n\n    let semMinimo = arr[2] ? full.replace(arr[2], \"\").trim() : full;\n\n    // -------------------------------------------------------\n    // 2️⃣ SEPARAÇÃO DINÂMICA (SCHEDULE vs CIDADES)\n    // -------------------------------------------------------\n    \n    let splitIndex = -1;\n\n    // AQUI ESTÁ A MÁGICA: Lista de prioridades de corte.\n    // O código tenta casar esses padrões para saber onde acaba a data e começa a cidade.\n    const padroesDeCorte = [\n        // 1. Padrões explícitos de calendário\n        /calendários?\\s+de\\s+saídas[\\.:]?/i,\n        /calendários?\\s+de\\s+partidas[\\.:]?/i,\n        \n        // 2. Padrões de dias da semana (NOVO: Resolve o seu erro)\n        // Procura por: \"Aos Domingos\", \"Às Terças-feiras\", \"Toda Segunda\", etc.\n        /(?:Aos?|Às?|Nas?|Toda?s?)\\s+(?:Segundas?|Terças?|Quartas?|Quintas?|Sextas?|Sábados?|Domingos?)(?:-feiras?)?/i,\n        \n        // 3. Padrões de frequência simples\n        /saídas\\s+diárias[\\.:]?/i,\n        /\\bdiariamente\\b/i,\n        /\\bdiárias\\b/i,\n        \n        // 4. Palavra chave \"partidas\" solta\n        /\\bpartidas\\b/i,\n        \n        // 5. Último recurso: Ponto final seguido de Maiúscula\n        /\\.\\s+(?=[A-Z])/\n    ];\n\n    for (const regex of padroesDeCorte) {\n        const match = semMinimo.match(regex);\n        if (match) {\n            // O corte acontece logo após o padrão encontrado\n            splitIndex = match.index + match[0].length;\n            break; \n        }\n    }\n\n    if (splitIndex > -1) {\n        // --- Parte 3: TEXTO DE SAÍDAS ---\n        let textoSaidas = semMinimo.substring(0, splitIndex).trim();\n        \n        // Remove prefixo \"Saídas:\" e limpa pontuação final\n        textoSaidas = textoSaidas.replace(/^Sa[ií]das:\\s*/i, \"\").trim();\n        if (textoSaidas.endsWith(\".\")) textoSaidas = textoSaidas.slice(0, -1);\n        \n        arr[3] = textoSaidas;\n\n        // --- Parte 1: CIDADES ---\n        let textoCidades = semMinimo.substring(splitIndex).trim();\n        arr[1] = textoCidades;\n    } else {\n        // Fallback TOTAL\n        let rawContent = semMinimo.replace(/^Sa[ií]das:\\s*/i, \"\");\n        arr[1] = rawContent;\n        arr[3] = \"Consulte calendário\";\n    }\n\n    // -------------------------------------------------------\n    // 3️⃣ LIMPEZA FINAL DAS CIDADES\n    // -------------------------------------------------------\n    if (arr[1]) {\n        arr[1] = arr[1]\n            // Remove aviões, setas e traços\n            .replace(/[✈•→—\\-]/g, \" \") \n            // Remove palavras de ligação que podem ter sobrado no início (ex: \"Aos...\")\n            .replace(/^(Aos?|Às?|Nas?)\\s+/i, \"\")\n            // Limpa espaços duplos\n            .replace(/\\s+/g, \" \")\n            .trim();\n    }\n\n    return arr;\n}\n\n// ================ PROCESSAMENTO =================\n\nconst out = input.map(item => {\n    const d = item.json || {};\n\n    const rawPrev =\n        (d.previa && typeof d.previa === \"object\" && (d.previa.conteudo || d.previa.content))\n            ? (d.previa.conteudo || d.previa.content)\n            : (d.previaTexto || d.previa_texto || d.previa || d[\"prévia\"] || \"\");\n\n    item.json.previaArray = parsePrevia(rawPrev);\n\n    return item;\n});\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7328,
+        -1008
+      ],
+      "id": "cc21c0b7-cbd1-4dc2-a024-5f78564b1815",
+      "name": "NODE – Parse Prévia"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Entrada\nconst input = $input.all();\n\n// ======================= PARTE 1 — Helpers =======================\n\n// Extrai sugestões (Opcionais)\nfunction extrairSugestao(blocoOriginal) {\n    if (!blocoOriginal) return null;\n    const text = String(blocoOriginal).replace(/\\r/g, \"\").trim();\n    \n    // Regex para capturar o texto do opcional\n    const regex = /(?:Sugest[aã]o|Opcional(?:\\s+Sugerido)?|Opcional)\\s*[:\\.\\-–—]?\\s*([\\s\\S]*?)(?=\\n*\\d+(?:º|o)?\\s*dia\\s*[–—-]|\\bObserva[cç][aã]o|$)/i;\n    \n    const m = text.match(regex);\n    if (!m) return null;\n    return m[1].trim();\n}\n\n// Limpa sufixos indesejados que sobram no nome da cidade\nfunction limparTokenCidade(token) {\n    if (!token) return \"\";\n    return token\n        .replace(/\\s+(por|para|com|em|na|no|de|do|da)\\s*$/i, \"\")\n        .replace(/^(por|para|com|em|na|no|de|do|da)\\s+/i, \"\")\n        .replace(/[\\.:,-]+$/, \"\")\n        .trim();\n}\n\nfunction parseItinerario(text) {\n    if (!text) return [];\n\n    text = String(text)\n        .replace(/\\\\n/g, \"\\n\")\n        .replace(/\\r/g, \"\")\n        .trim();\n\n    // AJUSTE 1: Regex de Dias mais estrita\n    const dayBlockRegex = /(?:^|[\\r\\n]+)(\\d+(?:º|o)?\\s*dia\\s*[–—-][\\s\\S]*?)(?=(?:^|[\\r\\n]+)\\d+(?:º|o)?\\s*dia\\s*[–—-]|\\s*$)/gi;\n    \n    const blocks = [...text.matchAll(dayBlockRegex)].map((m) => m[1].trim());\n    let dias = [];\n\n    const proibidosCidade = [\n        \"De manhã\", \"Pela manhã\", \"À tarde\", \"A tarde\", \"À noite\", \"A noite\", \"Meio\",\n        \"Após\", \"Depois\", \"Em horário\", \"Em horario\", \"Chegada\", \"Saída\", \"Saida\",\n        \"Partida\", \"Traslado\", \"Check-out\", \"Check out\", \"Check-in\", \"Check in\", \"Entrada\", \"Saindo\",\n        \"Continuaremos\", \"Seguiremos\", \"Prosseguimento\", \"Visita\", \"Visitaremos\",\n        \"Tour\", \"Cruzeiro\", \"Almoço\", \"Almoco\", \"Jantar\", \"Café\", \"Cafe\",\n        \"Lunch\", \"Mercado\", \"Passeio\", \"Parada\", \"Término\", \"Termino\", \"Fim\", \n        \"Participe\", \"Mergulhe\", \"Explore\", \"Conheça\", \"Desfrute\",\"Encontro\",\"Continuação\",\"Logo\",\"Desembarque\", \"Acorde\",\"Dia inteiro\",\"Dia livre para atividades independentes. No final do dia\",\"Dia\",\"livre\",\"para\"\n    ];\n\n    const proibidosRefeicoes = [\n        \"Sugestão\", \"Sugestao\", \n        \"Opcional\", \"Observação\", \"Observacao\", \"Obs:\", \n        \"Nota\", \"Inclui\", \"Não inclui\", \"Pacote\", \"Informações\", \"Documentos\", \"Importante\",\"Observações.\",\"observações.\"\n    ];\n\n    // ==================== LISTA DE TERMOS PROIBIDOS (AJUSTADA & ROBUSTA) ====================\n    // Agora aceita corte se o termo vier após ponto, ponto e vírgula ou nova linha.\n    // Prefixo universal para termos de meio de frase: (?:^|[\\r\\n]+|[\\.;]\\s*)\n    const termosProibidos = [\n        /Sugest[aã]o\\s*[:\\.]/i,\n        /Opcional\\s*-\\s*/i,\n        /Opcional\\s*Sugerido/i,\n        /^Opcional\\s*[:\\.]/mi, \n\n        // CABEÇALHOS DE SEÇÕES FINAIS\n        /(?:^|[\\r\\n]+|\\.\\s+)Observa[cç][õo]es(?:\\s*[:\\.\\-]|\\s*$)/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Observa[cç][ãa]o(?:\\s*[:\\.\\-]|\\s*$)/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Notas?\\s*[:\\.\\-]/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Informa[cç][õo]es\\s+Gerais/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Condi[cç][õo]es\\s+Gerais/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Documentos\\s+necessários/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Pacote\\s+Inclui/i,\n        /(?:^|[\\r\\n]+|\\.\\s+)Pacote\\s+N[ãa]o\\s+Inclui/i,\n        \n        // TERMOS LEGAIS E BUROCRÁTICOS (Agora pega mesmo após ponto ou ponto e virgula)\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Todos\\s+os\\s+preços/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)O\\s+itinerário\\s+poderá/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)A\\s+operadora\\s+local/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Caso\\s+algum\\s+museu/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Caso\\s+o\\s+pacote/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)As\\s+tarifas\\s+dos/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)A\\s+franquia\\s+de/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Taxa\\s+de\\s+turismo/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)O\\s+pagamento\\s+pode/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Certificado\\s+Internacional/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Reservas\\s+e\\s+pagamento/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Formas\\s+de\\s+pagamento/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)H[áa]\\s+sa[íi]das\\s+di[áa]rias/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Preços\\s+NÃO\\s+v[áa]lidos/i,\n        /(?:^|[\\r\\n]+|[\\.;]\\s*)Turistas\\s+brasileiros/i,\n        \n        // IMPORTANTE\n        /(?:^|[\\r\\n]+|\\.\\s+)Importante(?:\\s*[:\\-]|\\s*[\\r\\n]+)/i, \n        \n        /(?:^|[\\r\\n]+)A\\s+INVESTUR/i,\n        /(?:^|[\\r\\n]+)ENTRE\\s+EM\\s+CONTATO/i,\n        \n        // Outros termos\n        /(?:^|[\\r\\n]+)Para\\s+crianças\\s+e\\s+adolescentes/i,\n        /(?:^|[\\r\\n]+)Verifique\\s+as\\s+condições/i,\n        /sujeitos\\s+à\\s+alteração/i,\n        /autorização\\s+de\\s+viagem/i,\n        /cobertura\\s+da\\s+assistência/i\n    ];\n\n    for (const blocoOriginal of blocks) {\n        let bloco = blocoOriginal;\n\n        // ==================== 1. EXTRAIR REFEIÇÕES ====================\n        let refeicoes = \"\";\n        const refeicoesMatch = bloco.match(/Refei(?:ç|c)ões?\\s*[:\\.]?\\s*([^\\n\\r]*)/i);\n\n        if (refeicoesMatch) {\n            let val = refeicoesMatch[1].trim();\n\n            for (const proibida of proibidosRefeicoes) {\n                const regexProibida = new RegExp(proibida, \"i\");\n                const index = val.search(regexProibida);\n                if (index !== -1) {\n                    val = val.substring(0, index).trim();\n                }\n            }\n\n            val = val.replace(/^[-–—]+\\s*/, \"\").replace(/\\s*\\.*\\s*$/, \"\");\n            if (!val || val === \"-\") {\n                refeicoes = \"Refeições: -.\";\n            } else {\n                refeicoes = \"Refeições: \" + val + \".\";\n            }\n            bloco = bloco.replace(refeicoesMatch[0], \"\").trim();\n        } else {\n            refeicoes = \"Refeições: -.\";\n        }\n\n        // ==================== 2. EXTRAIR SUGESTÃO ====================\n        const sugestao = extrairSugestao(blocoOriginal);\n\n        // ==================== 3. PROCESSAR CABEÇALHO ====================\n        const diaNumRegex = /^(\\d+(?:º|o)?)\\s*(dia)\\s*[–—-]/i;\n        const m = bloco.match(diaNumRegex);\n        if (!m) continue;\n\n        const diaNumStr = m[1];\n        const diaLabel = m[2];\n        \n        let resto = bloco.substring(m[0].length).trim();\n        resto = resto.replace(/\\s*\\/\\s*/g, \" / \").replace(/\\s{2,}/g, \" \");\n\n        let linhas = resto.split(\"\\n\").map((l) => l.trim()).filter(Boolean);\n        let linhaCabecalhoOriginal = linhas[0] || \"\";\n        let restanteDoBloco = linhas.slice(1).join(\"\\n\").trim();\n\n        if (/^[\\.\\s]+$/.test(linhaCabecalhoOriginal) && linhas[1]) {\n            linhaCabecalhoOriginal = linhas[1];\n            restanteDoBloco = linhas.slice(2).join(\"\\n\").trim();\n        }\n\n        let corteIndex = Infinity;\n        const linhaLower = linhaCabecalhoOriginal.toLowerCase();\n        \n        for (const p of proibidosCidade) {\n            const idx = linhaLower.indexOf(p.toLowerCase());\n            if (idx !== -1 && idx < corteIndex) {\n                corteIndex = idx;\n            }\n        }\n\n        let parteCidades = \"\";\n        let parteTextoNaPrimeiraLinha = \"\";\n\n        if (corteIndex !== Infinity) {\n            parteCidades = linhaCabecalhoOriginal.substring(0, corteIndex).trim();\n            parteTextoNaPrimeiraLinha = linhaCabecalhoOriginal.substring(corteIndex).trim();\n        } else {\n            parteCidades = linhaCabecalhoOriginal;\n        }\n\n        const rawParts = parteCidades.split(/(\\/|\\.\\.\\.)/).map(p => p.trim()).filter(Boolean);\n        const tokensCidades = [];\n\n        for (const rawPart of rawParts) {\n            if (rawPart === \"/\" || rawPart === \"...\") {\n                tokensCidades.push(rawPart);\n                continue;\n            }\n            const tokenLimpo = limparTokenCidade(rawPart);\n            if (tokenLimpo && /[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(tokenLimpo.charAt(0))) {\n                tokensCidades.push(tokenLimpo);\n            }\n        }\n\n        const diaArrayFinal = [diaNumStr, diaLabel, \"- \"];\n        tokensCidades.forEach(t => diaArrayFinal.push(t));\n\n        let conteudoFinal = restanteDoBloco;\n        if (parteTextoNaPrimeiraLinha) {\n            conteudoFinal = (parteTextoNaPrimeiraLinha + \" \" + conteudoFinal).trim();\n        }\n        if (!conteudoFinal && tokensCidades.length === 0) {\n             conteudoFinal = resto; \n        }\n\n        // ==================== 4. CORTE BRUTO (Dentro do dia) ====================\n        for (const regex of termosProibidos) {\n            const match = conteudoFinal.match(regex);\n            if (match && match.index !== undefined) {\n                // Corta o texto no início da palavra encontrada\n                conteudoFinal = conteudoFinal.substring(0, match.index).trim();\n            }\n        }\n\n        dias.push({\n            dia: diaArrayFinal,\n            tituloDia: diaArrayFinal.join(\" \").trim(), \n            conteudo: conteudoFinal,\n            refeicoes: refeicoes,\n            opcionalSugerido: sugestao ? [sugestao] : []\n        });\n    }\n\n    // ==================== 5. FILTRAGEM DE DIAS FANTASMAS ====================\n    dias = dias.filter(d => {\n        const tituloSemCidade = d.tituloDia.replace(/\\d+(?:º|o)?\\s*dia\\s*[-–—]/i, \"\").trim();\n        const conteudoVazio = !d.conteudo || d.conteudo.length < 3;\n        const pareceTextoLegal = /^[-–—]\\s*(Para|Verifique|Consulte|Todos)/i.test(d.conteudo);\n\n        if ((conteudoVazio && tituloSemCidade.length < 2) || pareceTextoLegal) {\n            return false;\n        }\n        return true;\n    });\n\n    return dias;\n}\n\n// ======================= PARTE 2 — Execução =======================\n\nconst out = input.map((item) => {\n    const raw =\n        item.json.itinerario ||\n        item.json[\"itinerário\"] ||\n        item.json.itinerarioTexto ||\n        item.json.itinerario_texto ||\n        \"\";\n\n    item.json.itinerarioArray = parseItinerario(raw);\n\n    return item;\n});\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7120,
+        -1008
+      ],
+      "id": "8d5d09f1-8915-434b-8f87-5a770dabdfd5",
+      "name": "NODE – Parse Itinerário"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all();\n\nfunction parseObservacoes(texto) {\n  if (!texto) return [];\n\n  // Normaliza tudo\n  texto = String(texto)\n    .replace(/^Observa[cç][oõ]es?\\s*:?\\s*/i, \"\")\n    .replace(/\\r/g, \"\\n\")\n    .replace(/\\\\n/g, \"\\n\");\n\n  const linhas = texto\n    .split(\"\\n\")\n    .map(l => l.trim())\n    .filter(l => l);\n\n  const resultados = [];\n  let bloco = { titulo: null, itens: [] };\n\n  const isTitulo = (l) => /^[A-Za-zÀ-ÿ ]+:\\s*$/.test(l);\n\n  const limparItem = (str) => {\n    return str\n      .replace(/\\s+/g, \" \") // normaliza espaços\n      .replace(/\\s*\\.\\s*$/, \".\") // garante apenas um .\n      .replace(/,\\.$/, \".\") // corrige \",.\"\n      .trim();\n  };\n\n  for (let linha of linhas) {\n    // 1) Título detectado\n    if (isTitulo(linha)) {\n      if (bloco.itens.length > 0 || bloco.titulo !== null) {\n        resultados.push(bloco);\n      }\n      bloco = {\n        titulo: linha.replace(/:$/, \"\").trim(),\n        itens: []\n      };\n      continue;\n    }\n\n    // 2) Fragmenta por ponto final\n    const frases = linha\n      .split(\".\")\n      .map(f => f.trim())\n      .filter(f => f.length > 0);\n\n    for (let f of frases) {\n      const item = limparItem(f + \".\");\n      if (item.length > 1) bloco.itens.push(item);\n    }\n  }\n\n  // adiciona o último bloco\n  if (bloco.itens.length > 0 || bloco.titulo !== null) {\n    resultados.push(bloco);\n  }\n\n  return resultados;\n}\n\n// Processa todos os items do input\nconst out = input.map(item => {\n  const obs = item.json.observacoes || item.json.observações || \"\";\n  item.json.observacoesParsed = parseObservacoes(obs);\n  return item;\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7536,
+        -800
+      ],
+      "id": "ddd035f2-92ce-477f-b451-8075320f2750",
+      "name": "NODE – Parse Observações"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all();\n\nfunction parseDocumentos(raw) {\n    if (!raw) return [];\n\n    // ===== NORMALIZAÇÃO =====\n    let text = String(raw)\n        .replace(/^Documentos\\s*:?\\s*/i, \"\") // remove \"Documentos:\"\n        .replace(/\\\\n/g, \"\\n\")               // transforma \\n literal em quebra real\n        .replace(/\\r/g, \"\\n\")\n        .trim();\n\n    // ===== PRIMEIRA QUEBRA POR LINHAS =====\n    let linhas = text\n        .split(\"\\n\")\n        .map(l => l.trim())\n        .filter(Boolean);\n\n    // ===== SEGUNDA DIVISÃO: FRASES COMPLETAS =====\n    let partes = linhas.flatMap(l =>\n        l.split(/(?<=\\.)\\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/)\n    );\n\n    partes = partes\n        .map(p => p.trim())\n        .filter(Boolean);\n\n    // ===== AGRUPAMENTO DE FRASES =====\n    const documentosNormais = [];\n    const comestrela = [];\n\n    for (const p of partes) {\n        if (p.includes(\"*\")) {\n            // separa cada trecho que começa com * como item individual\n            const trechos = p.split(/\\*\\s+/).filter(Boolean);\n            trechos.forEach(t => comestrela.push(t.trim()));\n        } else {\n            documentosNormais.push(p);\n        }\n    }\n\n    // ===== RETORNA NO FORMATO DE DOCUMENTOSARRAY =====\n    const documentosArray = [...documentosNormais];\n\n    if (comestrela.length) {\n        documentosArray.push({\n            titulo: \"comestrela\",\n            itens: comestrela\n        });\n    }\n\n    return documentosArray;\n}\n\n// ===== APLICAÇÃO =====\nconst out = input.map(item => {\n    const raw =\n        item.json.documentos ||\n        item.json[\"documentos\"] ||\n        \"\";\n\n    item.json.documentosArray = parseDocumentos(raw);\n    return item;\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7328,
+        -800
+      ],
+      "id": "a29226c5-4430-4484-b2aa-2d2f8926a69d",
+      "name": "NODE – Parse Documentos"
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseInclui(raw) {\n  if (!raw) return [];\n\n  let texto = String(raw)\n    .replace(/\\r/g, \"\\n\")\n    .replace(/\\\\n/g, \"\\n\")\n    .trim();\n\n  // Remove \"Pacote Inclui\" mesmo grudado\n  texto = texto.replace(/^Pacote Inclui\\s*/i, \"\");\n\n  // Insere QUEBRA DE LINHA antes de títulos conhecidos\n  texto = texto.replace(/(Na [A-Za-zÀ-ÿ ]+:)/gi, \"\\n$1\\n\");\n  texto = texto.replace(/(No [A-Za-zÀ-ÿ ]+:)/gi, \"\\n$1\\n\");\n\n  // Quebra genérica adicional\n  texto = texto.replace(/([A-Za-zÀ-ÿ ]+:)(?=\\s*[A-ZÀ-ÿ])/g, \"$1\\n\");\n\n  const linhas = texto\n    .split(\"\\n\")\n    .map(l => l.trim())\n    .filter(l => l.length > 0);\n\n  const resultados = [];\n  let bloco = { titulo: \"Pacote Inclui\", itens: [] };\n\n  // ❗️ Nova regra correta dos TÍTULOS\n  const isTitulo = (l) => /^N[ao]\\s+[A-Za-zÀ-ÿ\\s]+:\\s*$/i.test(l);\n\n  const limparLinha = (l) =>\n    l.replace(/^\\s*[-•*]+\\s*/, \"\").trim();\n\n  const limparItem = (str) => {\n    return str\n      .replace(/\\s+/g, \" \")\n      .replace(/\\s*\\.\\s*$/, \".\")\n      .replace(/,\\.$/, \".\")\n      .trim();\n  };\n\n  for (let linha of linhas) {\n\n    // ─────────── TÍTULO ───────────\n    if (isTitulo(linha)) {\n\n      // Fecha bloco anterior se tinha conteúdo\n      if (bloco.itens.length > 0 || bloco.titulo !== \"Pacote Inclui\") {\n        resultados.push(bloco);\n      }\n\n      bloco = {\n        titulo: linha.replace(/:$/, \"\").trim(),\n        itens: []\n      };\n\n      continue;\n    }\n\n    // ─────────── ITENS ───────────\n    let semBullet = limparLinha(linha);\n\n    const frases = semBullet\n      .split(\".\")\n      .map(f => f.trim())\n      .filter(f => f);\n\n    for (let f of frases) {\n      bloco.itens.push(limparItem(f + \".\"));\n    }\n  }\n\n  resultados.push(bloco);\n\n  return resultados;\n}\n\n// NODE EXEC\nconst out = $input.all().map(item => {\n  const raw = item.json.inclui || item.json[\"inclui\"] || \"\";\n  item.json.incluiParsed = parseInclui(raw);\n  return item;\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7120,
+        -800
+      ],
+      "id": "a31fa46a-9567-4966-b23c-c016d2caacb5",
+      "name": "NODE – Parse Linhas (Inclui)"
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseNaoInclui(raw) {\n  if (!raw) return [];\n\n  let texto = String(raw)\n    .replace(/\\r/g, \"\\n\")\n    .replace(/\\\\n/g, \"\\n\")\n    .trim();\n\n  texto = texto.replace(/^Não Inclui\\s*/i, \"\");\n\n  // 🔥 NOVO STOP: corta tudo no primeiro \"*\"\n  const posAsterisco = texto.indexOf(\"*\");\n  if (posAsterisco !== -1) {\n    texto = texto.substring(0, posAsterisco).trim();\n  }\n\n  // Agora quebra em linhas (já limpas do lixo)\n  let linhasBrutas = texto\n    .split(\"\\n\")\n    .map(l => l.trim())\n    .filter(l => l.length > 0);\n\n  const limparLinha = (l) =>\n    l.replace(/^\\s*[-•*]+\\s*/, \"\").trim();\n\n  const limparItem = (str) => {\n    return str\n      .replace(/\\s+/g, \" \")\n      .replace(/\\s*\\.\\s*$/, \".\")\n      .replace(/,\\.$/, \".\")\n      .trim();\n  };\n\n  const resultados = [];\n  let bloco = { titulo: \"Não Inclui\", itens: [] };\n\n  for (let linha of linhasBrutas) {\n    let semBullet = limparLinha(linha);\n\n    const frases = semBullet\n      .split(\".\")\n      .map(f => f.trim())\n      .filter(f => f);\n\n    for (const f of frases) {\n      bloco.itens.push(limparItem(f + \".\"));\n    }\n  }\n\n  resultados.push(bloco);\n\n  return resultados;\n}\n\n\n// EXEC NODE\nconst out = $input.all().map(item => {\n  const json = (typeof item.json === \"object\" && item.json !== null)\n    ? item.json\n    : {};\n\n  const raw = json.naoInclui || json[\"naoInclui\"] || \"\";\n\n  json.naoIncluiParsed = parseNaoInclui(raw);\n\n  return { json };\n});\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7552,
+        -576
+      ],
+      "id": "ee505246-e41e-4888-9b5b-e5fa99e854e6",
+      "name": "NODE – Parse Linhas (Não Inclui)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// PARSER HÍBRIDO: SUPORTA TABELAS COMPLEXAS, SIMPLES E SEM CABEÇALHO\n// =====================================================================\nconst allItems = $input.all();\n\n// ================= HELPER FUNCTIONS =================\nfunction cleanText(s) {\n    if (s === null || s === undefined) return \"\";\n    return String(s)\n        .replace(/&nbsp;/g, \" \")\n        .replace(/<br\\s*\\/?>/gi, \" | \") // Transforma BR em separador para não colar palavras\n        .replace(/<[^>]+>/g, \"\")     \n        .replace(/\\s+/g, \" \")        \n        .trim();\n}\n\nfunction normalizeList(val) {\n    if (Array.isArray(val)) return val.map(cleanText).filter(Boolean);\n    if (val) return [cleanText(val)];\n    return [];\n}\n\n// Extrai tabela HTML\nfunction extractFirstTable(html) {\n    if (!html || typeof html !== \"string\") return \"\";\n    const m = html.match(/<table[\\s\\S]*?<\\/table>/i);\n    return m ? m[0] : \"\";\n}\n\n// ================= LÓGICA CONDICIONAL DE PARSING =================\nfunction parseTableHtmlToCities(tableHtml) {\n    if (!tableHtml) return [];\n\n    // 1. Extrai TODAS as linhas e células (matriz bruta)\n    const rowRe = /<tr[^>]*>([\\s\\S]*?)<\\/tr>/gi;\n    const cellRe = /<(td|th)[^>]*>([\\s\\S]*?)<\\/\\1>/gi;\n    \n    const allRows = [];\n    let r;\n    while ((r = rowRe.exec(tableHtml)) !== null) {\n        const cells = [];\n        let c;\n        const rowInner = r[1];\n        while ((c = cellRe.exec(rowInner)) !== null) {\n            cells.push(cleanText(c[2])); // Pega o conteúdo limpo\n        }\n        if (cells.length > 0) allRows.push(cells);\n    }\n\n    if (allRows.length < 2) return [];\n\n    // =========================================================\n    // AQUI ESTÁ A LÓGICA CONDICIONAL (VARIAVEL)\n    // =========================================================\n    \n    let headerRowIndex = -1;\n    let idxCidade = -1;\n    let idxNoites = -1;\n\n    // ESTRATÉGIA 1: Busca Semântica (Procura palavras-chave)\n    // Isso resolve o caso da tabela com Título na linha 0\n    for (let i = 0; i < Math.min(5, allRows.length); i++) { // Olha só as primeiras 5 linhas\n        const rowLower = allRows[i].map(c => c.toLowerCase());\n        \n        // Verifica se a linha parece um cabeçalho\n        const cIndex = rowLower.findIndex(c => c.includes(\"cidade\") || c.includes(\"city\") || c === \"destinos\");\n        const nIndex = rowLower.findIndex(c => c.includes(\"noite\") || c.includes(\"night\") || c === \"nts\");\n\n        if (cIndex !== -1 && nIndex !== -1) {\n            headerRowIndex = i;\n            idxCidade = cIndex;\n            idxNoites = nIndex;\n            break; // Achou! Para de procurar.\n        }\n    }\n\n    // ESTRATÉGIA 2: Fallback Posicional (Se a Estratégia 1 falhar)\n    // Assume que a estrutura é padrão: Linha 0 ou 1 é cabeçalho\n    if (headerRowIndex === -1) {\n        // Se a linha 0 tem apenas 1 célula (ex: Título com Colspan), tenta a linha 1\n        if (allRows[0].length === 1 && allRows.length > 1) {\n            headerRowIndex = 1;\n        } else {\n            headerRowIndex = 0;\n        }\n        // Assume posições padrão se não achou chaves\n        idxCidade = 0;\n        idxNoites = 1;\n    }\n\n    // =========================================================\n    // MAPEAMENTO DINÂMICO DE COLUNAS\n    // =========================================================\n    const headerRowData = allRows[headerRowIndex];\n    const columnMap = [];\n\n    // Mapeia o que é cada coluna baseada no cabeçalho encontrado\n    for (let i = 0; i < headerRowData.length; i++) {\n        if (i === idxCidade || i === idxNoites) continue;\n        \n        let title = headerRowData[i];\n        // Se não tiver título (coluna vazia), inventa um nome para não perder o dado\n        if (!title) title = `Opção ${columnMap.length + 1}`;\n\n        columnMap.push({ index: i, title: title });\n    }\n\n    const out = [];\n\n    // =========================================================\n    // EXTRAÇÃO DOS DADOS\n    // =========================================================\n    for (let i = headerRowIndex + 1; i < allRows.length; i++) {\n        const row = allRows[i];\n        // Proteção: Pula linhas vazias\n        if (row.length < 2) continue; \n        // Proteção: Pula repetição de cabeçalho no meio da tabela\n        if (row[idxCidade] && (row[idxCidade].toLowerCase().includes(\"cidade\") || row[idxCidade].toLowerCase().includes(\"city\"))) continue;\n\n        const city = row[idxCidade] || \"\";\n        const nights = row[idxNoites] || \"\";\n\n        const item = { \n            cidade: city, \n            noites: nights, \n            standard: [], superior: [], luxo: [], hotel: [], \n            outrasOpcoes: {} \n        };\n\n        columnMap.forEach(col => {\n            // Se a linha for mais curta que o cabeçalho, evita erro\n            const val = row[col.index] || \"\"; \n            if (!val) return;\n\n            const ti = col.title.toLowerCase();\n\n            // Roteamento inteligente das categorias\n            if (ti.includes(\"standard\")) item.standard.push(val);\n            else if (ti.includes(\"superior\")) item.superior.push(val);\n            else if (ti.includes(\"luxo\") || ti.includes(\"luxury\")) item.luxo.push(val);\n            // Cuidado com a palavra \"Hotel\" que pode aparecer em nomes de hoteis\n            else if (ti.includes(\"hotel\") && !ti.includes(\"azul\") && !ti.includes(\"cairo\")) item.hotel.push(val);\n            else {\n                // Tudo que sobra (Opção I, II, III...) vai para cá\n                const key = col.title.trim();\n                if (!item.outrasOpcoes[key]) item.outrasOpcoes[key] = [];\n                item.outrasOpcoes[key].push(val);\n            }\n        });\n\n        if (city || item.standard.length > 0 || Object.keys(item.outrasOpcoes).length > 0) {\n            out.push(item);\n        }\n    }\n\n    return out;\n}\n\nfunction normalizeCitiesArray(arr) {\n    return (arr || []).map(c => {\n        return {\n            cidade: cleanText(c.cidade || c.city || \"\"),\n            noites: cleanText(c.noites || c.nights || \"\"),\n            standard: normalizeList(c.standard),\n            superior: normalizeList(c.superior),\n            luxo: normalizeList(c.luxo || c.luxury),\n            hotel: normalizeList(c.hotel),\n            outrasOpcoes: c.outrasOpcoes || {}\n        };\n    });\n}\n\n// ================= PROCESSAMENTO PRINCIPAL =================\nconst results = [];\n\nfor (const item of allItems) {\n    let out = { cidades: [] };\n    let json = (item && item.json) ? item.json : {};\n\n    // 1. Normaliza Localização do Payload\n    if (json.data) json = json.data;\n    else if (json.result) json = json.result;\n    else if (json.payload) json = json.payload;\n\n    let htmlSrc = \"\";\n    \n    // 2. Detecta se é HTML string ou Objeto JSON\n    if (typeof json === \"string\" && json.includes(\"<table\")) htmlSrc = json;\n    else if (json.hoteis && typeof json.hoteis === \"string\") htmlSrc = json.hoteis;\n    else if (json.html && typeof json.html === \"string\") htmlSrc = json.html;\n    else if (json.hoteisHtml && typeof json.hoteisHtml === \"string\") htmlSrc = json.hoteisHtml;\n\n    // CENÁRIO A: É HTML (Vai para o Parser Híbrido)\n    if (htmlSrc) {\n        const table = extractFirstTable(htmlSrc);\n        const parsedCities = parseTableHtmlToCities(table);\n        out.cidades = normalizeCitiesArray(parsedCities);\n        results.push({ json: { ...item.json, hoteisNormalized: out } });\n        continue;\n    }\n\n    // CENÁRIO B: É JSON Estruturado (Usa direto)\n    if (Array.isArray(json.cidades)) {\n        out.cidades = normalizeCitiesArray(json.cidades);\n        results.push({ json: { ...item.json, hoteisNormalized: out } });\n        continue;\n    }\n    \n    // CENÁRIO C: Objeto Hoteis > Hoteis\n    if (json.hoteis && json.hoteis.hoteis && Array.isArray(json.hoteis.hoteis)) {\n        out.cidades = normalizeCitiesArray(json.hoteis.hoteis);\n        results.push({ json: { ...item.json, hoteisNormalized: out } });\n        continue;\n    }\n\n    // CENÁRIO D: Fallback para Estruturas Planas (Standard/Superior soltos)\n    if (Array.isArray(json.standard) || Array.isArray(json.superior)) {\n         const cityNames = Array.isArray(json.cidade) ? json.cidade : [];\n         const maxLen = Math.max(cityNames.length, (json.standard||[]).length, (json.superior||[]).length);\n         const fallback = [];\n         for(let i=0; i<maxLen; i++){\n             fallback.push({\n                 cidade: cityNames[i] || \"\",\n                 noites: \"\",\n                 standard: json.standard ? [json.standard[i]] : [],\n                 superior: json.superior ? [json.superior[i]] : [],\n                 outrasOpcoes: {}\n             });\n         }\n         out.cidades = normalizeCitiesArray(fallback);\n         results.push({ json: { ...item.json, hoteisNormalized: out } });\n         continue;\n    }\n\n    // Se falhar tudo\n    results.push({ json: { ...item.json, hoteisNormalized: { cidades: [] }, notice: \"Formato não reconhecido\" } });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7328,
+        -576
+      ],
+      "id": "b007343e-b8cb-444b-aff2-1fd85de6cdce",
+      "name": "NODE – hoteis"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===================================================\n// PARSE DE CALENDÁRIO ROBUSTO (CORRIGIDO)\n// ===================================================\n\nconst allItems = $input.all();\nlet results = [];\n\n// -----------------------------------------\n// 1. Utilitários de Texto e HTML\n// -----------------------------------------\nfunction cleanText(s) {\n    if (!s) return \"\";\n    return String(s)\n        .replace(/\\s+/g, \" \")\n        .replace(/&nbsp;/g, \" \")\n        .trim();\n}\n\nfunction extractTables(html) {\n    if (!html || typeof html !== \"string\") return [];\n    // Pega tabelas completas\n    return html.match(/<table[\\s\\S]*?<\\/table>/gi) || [];\n}\n\nfunction parseHtmlTable(tableHtml) {\n    // Regex ajustado para pegar TRs e TDs mesmo com atributos\n    const rowRe = /<tr[^>]*>([\\s\\S]*?)<\\/tr>/gi;\n    const cellRe = /<(td|th)[^>]*>([\\s\\S]*?)<\\/\\1>/gi;\n\n    const rows = [];\n    let rowMatch;\n\n    while ((rowMatch = rowRe.exec(tableHtml)) !== null) {\n        const rowCells = [];\n        let cellMatch;\n        cellRe.lastIndex = 0; \n        \n        while ((cellMatch = cellRe.exec(rowMatch[1])) !== null) {\n            let txt = cleanText(\n                cellMatch[2]\n                    .replace(/<br\\s*\\/?>/gi, \" ||BR|| \") \n                    .replace(/<[^>]+>/g, \"\") // Remove tags\n            ).replace(\" ||BR|| \", \" \"); \n            \n            rowCells.push(txt);\n        }\n        if (rowCells.length) rows.push(rowCells);\n    }\n    return rows;\n}\n\n// -----------------------------------------\n// 2. Configurações de Filtragem\n// -----------------------------------------\n\nconst BLACKLIST_ROW_START = [\n    // Removido \"single\", \"duplo\" daqui para não apagar a linha se ela começar com isso\n    \"criança\", \"suplemento\", \"serviço opcional\", \n    \"traslado\", \"ticket\", \"aéreo interno\"\n];\n\nconst BLACKLIST_CELL_CONTENT = [\n    // Termos exatos para apagar apenas a célula, não a linha toda\n    \"valor\", \"preço\", \"price\", \"aéreo\" \n    // Removi \"apartamento\" e \"parte terrestre\" para evitar apagar cabeçalhos úteis\n];\n\n// Regex para identificar preços (Formato 1.000,00 ou US$)\nconst REGEX_PRECO = /(\\d{1,3}\\.\\d{3},\\d{2}|US\\$|USD\\s+\\d)/;\n\n// -----------------------------------------\n// 3. Processamento Lógico (AQUI ESTÁ A CORREÇÃO)\n// -----------------------------------------\nfunction processTable(rawRows) {\n    if (!rawRows || rawRows.length === 0) return [];\n\n    // --- PASSO A: Filtragem Horizontal (Remove Linhas Inúteis) ---\n    let cleanRows = rawRows.filter(row => {\n        if (!row || row.length === 0) return false;\n        \n        const firstCell = (row[0] || \"\").toLowerCase();\n        \n        // CORREÇÃO 1: Verifica se a linha inteira está vazia, não só a primeira célula\n        const rowString = row.join(\"\").trim();\n        if (rowString === \"\") return false;\n\n        // Verifica blacklist de início de linha\n        if (BLACKLIST_ROW_START.some(term => firstCell.includes(term))) return false;\n\n        // CORREÇÃO 2: Só remove linha de \"preço\" se for curta (cabeçalho irrelevante).\n        // Se for um título longo (ex: \"PARTE TERRESTRE Preços...\"), mantém.\n        if ((firstCell.includes(\"preço\") || firstCell.includes(\"valor\")) && firstCell.length < 25) return false;\n\n        return true;\n    });\n\n    if (cleanRows.length === 0) return [];\n\n    // --- PASSO B: Sanitização de Células ---\n    cleanRows = cleanRows.map(row => {\n        return row.map(cell => {\n            const cLower = cell.toLowerCase();\n            \n            // Se for preço, apaga (mas protege datas como 01/05)\n            if (REGEX_PRECO.test(cell) && !cell.includes(\"/\")) return \"\"; \n            \n            // Se for palavra proibida estrita, apaga a célula\n            if (BLACKLIST_CELL_CONTENT.some(term => cLower === term)) return \"\";\n\n            return cell;\n        });\n    });\n\n    // --- PASSO C: Filtragem Vertical (Remove Colunas Vazias) ---\n    const numCols = Math.max(...cleanRows.map(r => r.length));\n    const keepColIndices = [];\n\n    for (let col = 0; col < numCols; col++) {\n        let hasData = false;\n        for (let row of cleanRows) {\n            // CORREÇÃO 3: Considera dado válido se tiver mais de 1 caractere (evita sobras como \"-\")\n            if (row[col] && row[col].trim().length > 1) {\n                hasData = true;\n                break;\n            }\n        }\n        if (hasData) keepColIndices.push(col);\n    }\n\n    // Reconstrói a tabela\n    const finalTable = cleanRows.map(row => {\n        return keepColIndices.map(index => row[index] || \"\");\n    });\n\n    return finalTable;\n}\n\n// -----------------------------------------\n// EXECUÇÃO\n// -----------------------------------------\nfor (const item of allItems) {\n    const originalJson = item.json || {};\n    // Tenta pegar de 'calendario', se não existir pega do JSON todo stringify\n    const htmlSource = originalJson.calendario || JSON.stringify(originalJson); \n\n    let calendariosFiltrados = [];\n    const tables = extractTables(htmlSource);\n\n    for (const t of tables) {\n        // Ignora opcionais, mas salva se tiver \"calendário\" no nome\n        if (t.toLowerCase().includes(\"opcional\") && !t.toLowerCase().includes(\"calendário\")) continue;\n\n        const rawRows = parseHtmlTable(t);\n        const processed = processTable(rawRows);\n\n        // Validação final: precisa ter algo que pareça data ou validade\n        const temConteudo = processed.some(row => \n            row.some(c => \n                /\\d{4}/.test(c) ||       // Ano 2024/2025\n                /sa[ií]da/i.test(c) ||   // Palavra Saída\n                /validade/i.test(c) ||   // Palavra Validade\n                /período/i.test(c) ||    // Palavra Período\n                /feiras/i.test(c) ||     // Dias da semana (Terças-Feiras)\n                /\\d{2}\\s*,\\s*\\d{2}/.test(c) // Datas soltas \"01, 08, 15\"\n            )\n        );\n\n        if (processed.length > 0 && temConteudo) {\n            calendariosFiltrados.push({\n                linhas: processed\n            });\n        }\n    }\n\n    results.push({\n        json: {\n            ...originalJson,\n            calendarios: calendariosFiltrados\n        }\n    });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7104,
+        -576
+      ],
+      "id": "4d947c01-16a9-49c6-b555-4c4925d0b895",
+      "name": "NODE – Caledario"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ==================== MERGE DRIVE + DOCS (versão robusta com tabelas HTML) ====================\nconst items = $input.all();\n\n// ------ helpers ------\nfunction normalizeText(s){\n  return String(s || '')\n    .replace(/\\r/g, '')\n    .replace(/\\n\\s*\\n/g, '\\n\\n')\n    .replace(/\\s{2,}/g, ' ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\n// Extrai parágrafos do objeto do Google Docs (body.content)\nfunction extractParagraphsFromDoc(doc){\n  const body = doc.body || doc.document || doc;\n  let out = [];\n  for (const el of body.content || []) {\n    if (el.paragraph) {\n      for (const e of el.paragraph.elements || []) {\n        if (e.textRun?.content) out.push(e.textRun.content);\n      }\n    }\n  }\n  return out.join('').trim();\n}\n\n// Extrai tabelas diretamente do body.content (forma estruturada)\nfunction extractTablesFromDoc(doc){\n  const body = doc.body || doc.document || doc;\n  const tables = [];\n  for (const el of body.content || []) {\n    if (el.table) {\n      const table = [];\n      for (const row of el.table.tableRows || []) {\n        const rowData = [];\n        for (const cell of row.tableCells || []) {\n          const parts = [];\n          for (const c of cell.content || []) {\n            if (c.paragraph) {\n              for (const e of c.paragraph.elements || []) {\n                if (e.textRun?.content) parts.push(e.textRun.content.trim());\n              }\n            }\n          }\n          rowData.push(parts.join(' '));\n        }\n        table.push(rowData);\n      }\n      tables.push(table);\n    }\n  }\n  return tables;\n}\n\n// Converte array de tabela em HTML <table>\nfunction tableArrayToHTML(table){\n  if (!table || !table.length) return '';\n  let html = '<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\">';\n  table.forEach((row, i) => {\n    html += '<tr>';\n    row.forEach(cell => {\n      if (i === 0) {\n        html += `<th>${cell || ''}</th>`;\n      } else {\n        html += `<td>${cell || ''}</td>`;\n      }\n    });\n    html += '</tr>';\n  });\n  html += '</table>';\n  return html;\n}\n\n// ====================== CLASSIFICAÇÃO UNIVERSAL DE TABELAS ======================\nfunction classifyTablesUniversal(tables) {\n  const result = {\n    hoteis: [],\n    calendario: [],\n    outros: []\n  };\n\n  const regexHoteis =\n    /(hotel|hot[eé]is|cidade|noites|similares|superior|standard|op[cç][aã]o)/i;\n\n  const regexCalendario =\n    /(parte\\s+terrestre|pre[cç]os|datas|sa[ií]das|participantes|calend[aá]rio)/i;\n\n  // Tabelas que DEVEM ser marcadas como calendário, nunca como hotéis\n  const regexBloqueioHoteis =\n    /(pre[cç]os|usd|d[oó]lares|categoria\\s+superior|categoria\\s+standard|ryokan|mínimo\\s+de\\s+2)/i;\n\n  tables.forEach(tbl => {\n    const flat = tbl.map(row => row.join(\" \")).join(\" \").toLowerCase();\n\n    // 🔒 Se contém termos de preços → força ser calendário\n    if (regexBloqueioHoteis.test(flat)) {\n      result.calendario.push(tbl);\n      return;\n    }\n\n    // 🏨 Hotéis previstos\n    if (regexHoteis.test(flat)) {\n      result.hoteis.push(tbl);\n      return;\n    }\n\n    // 📆 Calendário / preços\n    if (regexCalendario.test(flat)) {\n      result.calendario.push(tbl);\n      return;\n    }\n\n    // ❔ Qualquer outra tabela\n    result.outros.push(tbl);\n  });\n\n  return result;\n}\n\n\n// ------ identificar itens do drive e do docs ------\nconst driveItems = items.filter(i => i.json && i.json.id);\nconst docItems = items.filter(i => i.json && (i.json.documentId || i.json.data || i.json.body || i.json.content || i.json.fileId));\n\nfunction findMatchForDrive(drive){\n  return docItems.find(doc => {\n    const cand = [\n      doc.json.documentId,\n      doc.json.id,\n      doc.json.fileId,\n      doc.json.resourceId,\n      (doc.json.data && doc.json.data.fileId)\n    ].filter(Boolean).map(String);\n    return cand.includes(String(drive.json.id));\n  });\n}\n\n// ----- montar saída -----\nconst output = driveItems.map(drive => {\n  const match = findMatchForDrive(drive);\n\n  let content = '';\n  let hoteis = '';\n  let calendario = '';\n  let observacoesExtra = '';\n  let documentosExtra = '';\n\n  if (match) {\n    if (match.json.body && Array.isArray(match.json.body.content)) {\n\n      // Texto principal\n      content = normalizeText(extractParagraphsFromDoc(match.json));\n\n      // Extrair tabelas estruturadas\n      const tables = extractTablesFromDoc(match.json);\n\n      if (tables.length) {\n        \n        // 🌟 CLASSIFICAÇÃO UNIVERSAL 🌟\n        const classified = classifyTablesUniversal(tables);\n\n        // Converte todas as tabelas\n        hoteis = classified.hoteis.map(tableArrayToHTML).join(\"\\n\\n\");\n        calendario = classified.calendario.map(tableArrayToHTML).join(\"\\n\\n\");\n\n        // Extras opcionais (se existirem)\n        classified.outros.forEach(tbl => {\n          const flat = tbl.map(row => row.join(\" \")).join(\" \").toLowerCase();\n\n          if (/observa[cç][oõ]es/.test(flat)) {\n            observacoesExtra = tableArrayToHTML(tbl);\n          }\n\n          if (/documentos\\s+necess[aá]rios/.test(flat)) {\n            documentosExtra = tableArrayToHTML(tbl);\n          }\n        });\n\n      }\n\n    } else {\n\n      // Fallback texto simples\n      const raw = match.json.data || match.json.content || match.json.text || match.json.plainText || '';\n      content = normalizeText(raw);\n\n      const hoteisRegex = /HOT[ÉE]IS\\s+PREVISTOS[\\s\\S]*?(?=PARTE\\s+TERRESTRE)/i;\n      const calendarioRegex = /(PARTE\\s+TERRESTRE[\\s\\S]*)/i;\n\n      const hMatch = content.match(hoteisRegex);\n      if (hMatch) hoteis = hMatch[0].trim();\n\n      const cMatch = content.match(calendarioRegex);\n      if (cMatch) calendario = cMatch[1].trim();\n    }\n  }\n\n  return {\n    json: {\n      id: drive.json.id,\n      nome: drive.json.name,\n      content,\n      hoteis,\n      calendario,\n      observacoesExtra,\n      documentosExtra\n    }\n  };\n});\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7568,
+        -1264
+      ],
+      "id": "f5b1d59b-f850-4f62-8ec0-823b0ce28877",
+      "name": "juntando nome da file com os roteiros e ids"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os itens (cada um é um roteiro)\nconst allItems = $input.all();\nlet results = [];\n// Tenta pegar o mapa do primeiro item\nlet mapa = $input.first().json.mapa_automatico || \"\";\n\n// Função para limpar a palavra repetida (ex: \"Opcional: Opcional...\")\nfunction cleanPrefix(text, prefix) {\n  if (!text) return \"\";\n  const regex = new RegExp(`^${prefix}[:\\\\s-]*`, \"i\"); \n  return text.replace(regex, \"\").trim();\n}\n\nfor (const item of allItems) {\n  const data = item.json;\n\n  const titulo = data.titulo;\n  const itinerario = data.itinerarioArray || [];\n\n  let itinerarioHtml = `\n  <div style=\"\n      display: flex;\n      justify-content: flex-start;\n      align-items: flex-start;\n      gap: 20px;\n      flex-wrap: wrap;\n      margin-top: 10px;\n      font-family: Helvetica, Arial, sans-serif;\n    \">\n      <div style=\"\n        flex: 1 1 48%;\n        min-width: 320px;\n        box-sizing: border-box;\n      \">\n      <h3 style=\"font-family: Helvetica;\">ITINERÁRIO</h3>\n  `;\n\n  for (const it of itinerario) {\n    // 1. TÍTULO DO DIA\n    // Agora usamos preferencialmente it.tituloDia (que vem limpo do parser)\n    // Se não existir, juntamos o array dia.\n    let tituloDia = \"\";\n    \n    if (it.tituloDia && it.tituloDia.length > 1) {\n        tituloDia = it.tituloDia;\n    } else if (Array.isArray(it.dia)) {\n        tituloDia = it.dia.filter(Boolean).join(\" \").trim();\n    } else {\n        tituloDia = String(it.dia || \"\").trim();\n    }\n\n    // 2. CONTEÚDO\n    let conteudo = (it.conteudo || \"\")\n      .replace(/\\n+/g, \" \")\n      .replace(/\\s+/g, \" \")\n      .trim();\n\n    // 3. REFEIÇÕES (Itálico)\n    let refeicoesRaw = (it.refeicoes || \"\").trim();\n    let refeicoesHtml = \"\";\n    if (refeicoesRaw && refeicoesRaw.length > 1 && refeicoesRaw !== \"-\" && refeicoesRaw !== \"Refeições: -.\") {\n       const cleanRef = cleanPrefix(refeicoesRaw, \"Refeições\");\n       refeicoesHtml = `<em><strong>Refeições:</strong> ${cleanRef}</em>`;\n    }\n\n    // 4. OPCIONAL\n    let opcionalRaw = it.opcionalSugerido || [];\n    let opcionalHtml = \"\";\n    \n    if (!Array.isArray(opcionalRaw) && opcionalRaw) opcionalRaw = [opcionalRaw];\n\n    if (Array.isArray(opcionalRaw) && opcionalRaw.length > 0) {\n      // Limpa prefixos duplicados\n      const txtClean = opcionalRaw.map(o => cleanPrefix(o, \"Opcional\")).join(\"; \");\n      \n      if (txtClean.length > 2) {\n         // Formatação: <br> antes, cinza (#666), itálico\n         opcionalHtml = `<br><span style=\"color: #666; font-style: italic;\"><strong>Opcional:</strong> ${txtClean}</span>`;\n      }\n    }\n\n    // MONTAGEM DO HTML DO DIA\n    itinerarioHtml += `<strong>${tituloDia}</strong><br>\\n`;\n    \n    if (conteudo) itinerarioHtml += `<span>${conteudo}</span><br>\\n`;\n    if (refeicoesHtml) itinerarioHtml += `${refeicoesHtml}<br>\\n`; \n    if (opcionalHtml) itinerarioHtml += `${opcionalHtml}\\n`; \n    \n    itinerarioHtml += `<br>\\n`;\n  }\n\n  // coluna do mapa\n  itinerarioHtml += `\n      </div>\n      <div style=\"\n        flex: 1 1 35%;\n        min-width: 340px;\n        display: flex;\n        justify-content: flex-end;\n        align-items: flex-start;\n        margin-left: 30px;\n      \">\n        <div style=\"\n          width: 100%;\n          max-width: 520px;\n          height: 480px;\n          border-radius: 12px;\n          overflow: hidden;\n          background: transparent !important;\n          box-shadow: none !important;\n        \">\n          <div style=\"\n            width: 100%;\n            height: 100%;\n            background: transparent !important;\n            border: none !important;\n            margin: 0;\n            padding: 0;\n          \">\n            ${mapa}\n          </div>\n        </div>\n      </div>\n    </div>\n\n    <style>\n    @media (min-width: 900px) {\n      .itinerario-flex-container {\n        display: flex !important;\n        flex-wrap: nowrap !important;\n        align-items: flex-start !important;\n      }\n    }\n    </style>\n  `;\n\n  results.push({\n    json: {\n      ...data,\n      titulo,\n      itinerarioHtml,\n      tituloAHtml: data.tituloAHtml || \"\",\n      previaHtml: data.previaHtml || \"\",\n      observacoesArray: data.observacoesArray || [],\n      documentosArray: data.documentosArray || [],\n      incluiArray: data.incluiArray || [],\n      naoIncluiArray: data.naoIncluiArray || [],\n      naoIncluiParsed: data.naoIncluiParsed || [],\n      hoteisArray: data.hoteisArray || [],\n      calendarioArray: data.calendarioArray || [],\n      itinerarioArray: data.itinerarioArray || [],\n      cidades: data.cidades || [],\n      mapa_automatico: mapa \n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4928,
+        -1184
+      ],
+      "id": "8c487092-a5e1-41c4-acf3-dc5a6f1a0e34",
+      "name": "Template html - Observaçoes1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -6160,
+        -1088
+      ],
+      "id": "29d36b63-499e-479a-8cd4-abba9ec58945",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Atue como um Motor de Geolocalização Turística.\n\nENTRADA:\n{{ $json.cidades }}\n\nSua missão é converter nomes de cidades em coordenadas de LANDMARKS (Pontos de Referência) específicos, para garantir que o pino do mapa caia no lugar certo.\n\nREGRAS DE CONVERSÃO OBRIGATÓRIAS:\n1. NÃO use coordenadas genéricas de cidade. Converta a cidade em um Ponto Turístico Central.\n   - Se a entrada for \"Hong Kong\" -> Busque coordenadas de \"Statue Square Central\" ou \"The Peninsula Hotel\". (Isso evita cair na água).\n   - Se a entrada for \"Seul\" -> Busque coordenadas de \"City Hall Seoul\" ou \"Gwanghwamun Plaza\".\n   - Se a entrada for \"Rio de Janeiro\" -> Busque coordenadas de \"Copacabana Palace\".\n\n2. PARQUES E MONTANHAS:\n   - Se for \"Seorak\" ou \"Seoraksan\" -> Busque coordenadas de \"Seoraksan National Park Visitor Center\". (Isso evita cair no topo da montanha inacessível).\n\n3. LISTAS MÚLTIPLAS:\n   - Se a entrada for \"Seul, Daegu\", gere dois pinos distintos.\n\nFORMATO DE SAÍDA:\n[auto_map pontos=\"NomeDaCidade|lat,lng;NomeDaCidade|lat,lng\"]\n\nExemplo:\nEntrada: Hong Kong, Seoraksan\nSaída: [auto_map pontos=\"Hong Kong|22.2819,114.1581;Seoraksan|38.1195,128.4643\"]\n\nRetorne APENAS o shortcode.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -6576,
+        -704
+      ],
+      "id": "168c0696-b3f9-4dde-b896-6e6c783d4ce2",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -6544,
+        -448
+      ],
+      "id": "d9cb147d-03cd-4651-a381-4bacae54cec4",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "SEU_OPENROUTER_CONNECTION_ID",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "#### Automaçao WordPress ####\n",
+        "height": 1040,
+        "width": 4592
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -8880,
+        -1280
+      ],
+      "typeVersion": 1,
+      "id": "7509d783-6d43-408e-8837-0e0d1c1f8f49",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-whatsapp",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -8736,
+        160
+      ],
+      "id": "6c55f00a-35a2-45dd-abbf-18a24839b43b",
+      "name": "Webhook",
+      "webhookId": "SEU_WEBHOOK_ID_AQUI"
+    }
+  ],
+  "pinData": {
+    "When clicking ‘Execute workflow’": [
+      {
+        "json": {}
+      }
+    ]
+  },
+  "connections": {
+    "Search Files": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Get a document",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a document": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "juntando nome da file com os roteiros e ids",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "separando as seçoes ": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Título",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a page4": {
+      "main": [
+        [
+          {
+            "node": "Update a page3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - Itinerario": {
+      "main": [
+        [
+          {
+            "node": "Template html - Observaçoes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - titulo e previa ": {
+      "main": [
+        [
+          {
+            "node": "Template html - Itinerario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - Observaçoes": {
+      "main": [
+        [
+          {
+            "node": "Template html - Documentos ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - Documentos ": {
+      "main": [
+        [
+          {
+            "node": "Template html - Inclui",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - Inclui": {
+      "main": [
+        [
+          {
+            "node": "Template html - NaoInclui",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template html - NaoInclui": {
+      "main": [
+        [
+          {
+            "node": "Template Html - Calendario de partidas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template Html - Calendario de partidas": {
+      "main": [
+        [
+          {
+            "node": "Organizando - hoteis ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Organizando - hoteis ": {
+      "main": [
+        [
+          {
+            "node": "Removendo os /n /g",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Removendo os /n /g": {
+      "main": [
+        [
+          {
+            "node": "Create file from text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "separando roteiro + cidade": {
+      "main": [
+        []
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Search Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Título": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Prévia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Prévia": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Itinerário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Itinerário": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Observações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Observações": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Documentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Documentos": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Linhas (Inclui)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Linhas (Inclui)": {
+      "main": [
+        [
+          {
+            "node": "NODE – Parse Linhas (Não Inclui)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Parse Linhas (Não Inclui)": {
+      "main": [
+        [
+          {
+            "node": "NODE – hoteis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – hoteis": {
+      "main": [
+        [
+          {
+            "node": "NODE – Caledario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NODE – Caledario": {
+      "main": [
+        [
+          {
+            "node": "separando roteiro + cidade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "juntando nome da file com os roteiros e ids": {
+      "main": [
+        [
+          {
+            "node": "separando as seçoes ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Template html - titulo e previa ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f598278d-1ab0-4fb3-8f4a-e5cdfd11d032",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5b99012a2e3da59aa9c23dea3fdb7236be11912225290f14cd6a3af40a10605d"
+  },
+  "id": "VskpA0TBq2ue6VNq",
+  "tags": []
+}
