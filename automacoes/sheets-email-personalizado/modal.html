@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+      body { 
+        padding: 20px; 
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        background-color: #f8f9fa; 
+      }
+      .container { 
+        background: #fff; 
+        padding: 20px; 
+        border-radius: 8px; 
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
+      }
+      .campo { margin-bottom: 15px; }
+      label { display: block; margin-bottom: 5px; font-weight: 600; color: #3c4043; font-size: 14px; }
+      
+      input[type="text"] { 
+        width: 100%; 
+        padding: 10px; 
+        box-sizing: border-box; 
+        border: 1px solid #dadce0; 
+        border-radius: 4px; 
+        font-size: 14px; 
+        margin-top: 5px;
+      }
+      input[type="text"]:focus { outline: none; border-color: #1a73e8; }
+      
+      /* --- CORREÇÃO DO BOTÃO --- */
+      button.action {
+        display: block; 
+        width: 100%; /* Ocupa a largura total disponível no container */
+        margin: 20px 0 0 0; /* Margem reduzida para subir o botão */
+        padding: 12px 0; /* Padding vertical ajustado */
+        font-size: 14px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-radius: 4px; /* Bordas levemente arredondadas (padrão Google) */
+        background-color: #1a73e8; 
+        color: white;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        transition: background-color 0.2s;
+        line-height: normal; /* Garante que o texto fique no meio */
+        text-align: center;
+      }
+      
+      button.action:hover:not(:disabled) {
+         background-color: #155ab6; 
+         box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      }
+       button.action:disabled {
+         background-color: #ccc;
+         cursor: not-allowed;
+       }
+
+      .checkbox-label { 
+        font-weight: normal; 
+        display: flex; 
+        align-items: center; 
+        cursor: pointer; 
+        font-size: 14px;
+        margin-top: 15px;
+      }
+      input[type="checkbox"] { margin-right: 10px; }
+      
+      #status { font-size: 13px; margin-top: 10px; min-height: 20px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="campo">
+        <label for="buscaFile">Digite o File/Nº para buscar:</label>
+        <input type="text" id="buscaFile" placeholder="Ex: invt420">
+      </div>
+
+      <div class="campo">
+        <label class="checkbox-label">
+          <input type="checkbox" id="paraMim" checked> Enviar para meu e-mail
+        </label>
+      </div>
+
+      <div class="campo">
+        <label>Enviar para outro e-mail (opcional):</label>
+        <input type="text" id="outroEmail" placeholder="cliente@exemplo.com">
+      </div>
+
+      <button class="action" id="btnEnviar" onclick="buscarEEnviar()">ENVIAR AGORA</button>
+       <div id="status" style="text-align: center; color: #666;"></div>
+    </div>
+
+    <script>
+      function buscarEEnviar() {
+        var termo = document.getElementById('buscaFile').value;
+        
+        if (!termo || termo.trim() === "") {
+          alert("Por favor, digite um File/Nº para buscar.");
+          document.getElementById('buscaFile').focus();
+          return;
+        }
+
+        var btn = document.getElementById('btnEnviar');
+        var statusDiv = document.getElementById('status');
+        
+        // Estado de Carregamento
+        btn.disabled = true;
+        btn.innerText = "ENVIANDO...";
+        statusDiv.innerText = "Processando, aguarde...";
+
+        var config = {
+          termoBusca: termo.trim(),
+          enviarParaMim: document.getElementById('paraMim').checked,
+          outroEmail: document.getElementById('outroEmail').value
+        };
+        
+        google.script.run
+          .withSuccessHandler(function(msg) {
+            alert(msg);
+            google.script.host.close();
+          })
+          .withFailureHandler(function(erro) {
+            alert("Erro: " + erro.message);
+            btn.disabled = false;
+            btn.innerText = "ENVIAR AGORA";
+            statusDiv.innerText = "";
+          })
+          .processarBuscaEEnvio(config);
+      }
+    </script>
+  </body>
+</html>
