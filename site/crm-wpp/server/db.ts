@@ -1,15 +1,20 @@
 import { eq, and, desc } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { InsertUser, users, contacts, messages, Contact, Message } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let pool: Pool | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      if (!pool) {
+        pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      }
+      _db = drizzle(pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -68,7 +73,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    // Correção para PostgreSQL: usando onConflictDoUpdate
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -97,7 +104,7 @@ export async function getOrCreateContact(phone: string, name?: string, email?: s
   const existing = await db.select().from(contacts).where(eq(contacts.phone, phone)).limit(1);
   if (existing.length > 0) return existing[0];
 
-  const result = await db.insert(contacts).values({
+  await db.insert(contacts).values({
     phone,
     name: name || phone,
     email: email || undefined,

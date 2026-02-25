@@ -17,12 +17,14 @@ function Router() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <Switch>
-        <Route path={"/"} component={Home} />
-        <Route path={"/404"} component={NotFound} />
-        <Route component={NotFound} />
-      </Switch>
+  return (
+     <DashboardLayout>
+    <Switch>
+      <Route path={"/"} component={Dashboard} />
+      <Route path={"/404"} component={NotFound} />
+      <Route component={NotFound} />
+    </Switch>
+  </DashboardLayout>
     );
   }
 

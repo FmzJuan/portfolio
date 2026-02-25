@@ -28,8 +28,8 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: Users, label: "Contatos", path: "/contacts" }, // ou outro caminho que desejar
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -56,7 +56,7 @@ export default function DashboardLayout({
     return <DashboardLayoutSkeleton />
   }
 
-  if (!user) {
+  /*if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
@@ -80,7 +80,7 @@ export default function DashboardLayout({
         </div>
       </div>
     );
-  }
+  }*/
 
   return (
     <SidebarProvider
