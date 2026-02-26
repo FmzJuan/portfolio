@@ -26,50 +26,44 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 EMAIL_DISPARADOR_ALERTA = os.getenv("EMAIL_DISPARADOR_ALERTA")
 SENHA_DISPARADOR_ALERTA = os.getenv("SENHA_DISPARADOR_ALERTA") 
 
-# URL da logo da Investur para o relatório (Pode hospedar no Imgur ou usar link do site)
-LOGO_INVESTUR = "https://investur.com.br/wp-content/imagens-juan/logo.png?_t=1771946394" # Substitua pelo link real da logo
+LOGO_INVESTUR = "https://investur.com.br/wp-content/imagens-juan/logo.png?_t=1771946394"
 
 CONTAS = [
-   {
-      "titan_email": os.getenv("titanEmail_ana"), 
-      "titan_password": os.getenv("titanSenha_ana"), 
-      "gmail_destino": os.getenv("gmail_ana")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_juan"), 
-      "titan_password": os.getenv("titanSenha_juan"), 
-      "gmail_destino": os.getenv("gmail_juan")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_gleyce"), 
-      "titan_password": os.getenv("titanSenha_gleyce"), 
-      "gmail_destino": os.getenv("gmail_gleyce")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_junior"), 
-      "titan_password": os.getenv("titanSenha_junior"), 
-      "gmail_destino": os.getenv("gmail_junior")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_alberto"), 
-      "titan_password": os.getenv("titanSenha_alberto"), 
-      "gmail_destino": os.getenv("gmail_alberto")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_silvia"), 
-      "titan_password": os.getenv("titanSenha_silvia"), 
-      "gmail_destino": os.getenv("gmail_silvia")
-   },
-   {
-      "titan_email": os.getenv("titanEmail_marcel"), 
-      "titan_password": os.getenv("titanSenha_marcel"), 
-      "gmail_destino": os.getenv("gmail_marcel")
-   },
-   # {
-   #    "titan_email": os.getenv("titanEmail_cristina"), 
-   #    "titan_password": os.getenv("titanSenha_cristina"), 
-   #    "gmail_destino": os.getenv("gmail_cristina")
-   # },
+    {
+       "titan_email": os.getenv("titanEmail_ana"), 
+       "titan_password": os.getenv("titanSenha_ana"), 
+       "gmail_destino": os.getenv("gmail_ana")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_juan"), 
+       "titan_password": os.getenv("titanSenha_juan"), 
+       "gmail_destino": os.getenv("gmail_juan")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_gleyce"), 
+       "titan_password": os.getenv("titanSenha_gleyce"), 
+       "gmail_destino": os.getenv("gmail_gleyce")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_junior"), 
+       "titan_password": os.getenv("titanSenha_junior"), 
+       "gmail_destino": os.getenv("gmail_junior")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_alberto"), 
+       "titan_password": os.getenv("titanSenha_alberto"), 
+       "gmail_destino": os.getenv("gmail_alberto")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_silvia"), 
+       "titan_password": os.getenv("titanSenha_silvia"), 
+       "gmail_destino": os.getenv("gmail_silvia")
+    },
+    {
+       "titan_email": os.getenv("titanEmail_marcel"), 
+       "titan_password": os.getenv("titanSenha_marcel"), 
+       "gmail_destino": os.getenv("gmail_marcel")
+    },
 ]
 
 TEMPO_POR_CICLO_SEG = 60
@@ -94,6 +88,7 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
     email_destino = conta["gmail_destino"]
 
     try:
+        # CONEXÃO IMAP (Leitura)
         mail = imaplib.IMAP4_SSL(TITAN_IMAP_SERVER, 993)
         mail.login(email_origem, senha)
         
@@ -109,9 +104,6 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
         if not lista_ids:
             mail.logout()
             return
-
-        smtp_server = smtplib.SMTP_SSL(TITAN_SMTP_SERVER, 465)
-        smtp_server.login(email_origem, senha)
 
         agora_local = datetime.datetime.now()
 
@@ -135,7 +127,6 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                 remetente_orig = str(msg_original.get('From', 'Desconhecido'))
                 nome_cliente, email_cliente = email.utils.parseaddr(remetente_orig)
                 
-                # Captura os destinatários originais (Grupos/Alias/Cópias)
                 original_to = msg_original.get('To')
                 original_cc = msg_original.get('Cc')
                 
@@ -157,7 +148,7 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                 nome_anexo = "".join(c for c in assunto_limpo[:30] if c.isalnum() or c in (' ', '_', '-')).strip()
 
                 # ==========================================
-                # PREPARAÇÃO: O E-MAIL ORIGINAL ENCAMINHADO DIRETAMENTE
+                # PREPARAÇÃO DA MENSAGEM
                 # ==========================================
                 msg_direta = email.message_from_bytes(raw_email_bytes)
                 for header in ['Subject', 'From', 'To', 'Cc', 'Bcc', 'Reply-To', 'Return-Path', 'Sender', 'Message-ID']:
@@ -168,30 +159,33 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                 nome_exibicao = nome_cliente if nome_cliente else email_cliente
                 msg_direta['From'] = f'"{nome_exibicao} (via TI)" <{email_origem}>'
                 
-                # Injeta o Alias/Grupo Original para o funcionário ver a quem foi enviado
-                if original_to:
-                    msg_direta['To'] = original_to
-                else:
-                    msg_direta['To'] = email_destino
-                if original_cc:
-                    msg_direta['Cc'] = original_cc
-
+                if original_to: msg_direta['To'] = original_to
+                else: msg_direta['To'] = email_destino
+                if original_cc: msg_direta['Cc'] = original_cc
                 if email_cliente: msg_direta['Reply-To'] = email_cliente
 
                 metodo_usado = ""
                 
                 # ==========================================
-                # OS 4 PLANOS DE ENVIO (Com Plano de Contenção)
+                # AUTO-CURA DE REDE: CONEXÃO SMTP ISOLADA
+                # Evita o erro "please run connect() first"
                 # ==========================================
                 try:
-                    # PLANO A1: Tenta enviar preservando os grupos e cópias originais
+                    smtp_server = smtplib.SMTP_SSL(TITAN_SMTP_SERVER, 465)
+                    smtp_server.login(email_origem, senha)
+                except Exception as erro_smtp:
+                    dados_hora["falhas"].append(f"Falha ao abrir porta SMTP para {assunto_limpo}: {erro_smtp}")
+                    continue # Pula para o próximo e-mail sem quebrar o código
+
+                try:
+                    # PLANO A1
                     smtp_server.send_message(msg_direta, from_addr=email_origem, to_addrs=[email_destino])
                     dados_hora["sucessos"] += 1
                     mail.store(num, '+FLAGS', '(\\Seen \\Deleted)')
                     metodo_usado = "Plano A1 (Nativo c/ Grupo)"
                     
                 except Exception:
-                    # PLANO A2 (CONTENÇÃO): Se o Titan bloquear o Alias, apaga o grupo e força o Gmail (Comportamento Antigo)
+                    # PLANO A2
                     try:
                         del msg_direta['To']
                         if 'Cc' in msg_direta: del msg_direta['Cc']
@@ -203,7 +197,7 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                         metodo_usado = "Plano A2 (Nativo Forçado)"
                         
                     except Exception:
-                        # PLANO B: ZIP (Anexo Gigante)
+                        # PLANO B
                         try:
                             msg_zip = EmailMessage()
                             msg_zip['Subject'] = f"[COMPACTADO] {assunto_limpo}"
@@ -224,7 +218,7 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                             metodo_usado = "Plano B (ZIP)"
                             
                         except Exception:
-                            # PLANO C: Retido na Origem
+                            # PLANO C
                             try:
                                 msg_lite = EmailMessage()
                                 msg_lite['Subject'] = f"[ARQUIVO RETIDO] {assunto_limpo}"
@@ -239,10 +233,14 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                                 metodo_usado = "Plano C (Retido)"
                                 
                             except Exception:
-                                # FALHA TOTAL
                                 mail.store(num, '+FLAGS', '(\\Seen \\Flagged)')
                                 dados_hora["falhas"].append(f"Bloqueio crônico do Servidor: {assunto_limpo}")
                                 metodo_usado = "Falha de Entrega (Bloqueado)"
+                
+                # FECHA A CONEXÃO SMTP APÓS PROCESSAR ESTE E-MAIL (Auto-cura)
+                try:
+                    smtp_server.quit()
+                except: pass
 
                 # ==========================================
                 # SALVA PARA OS RELATÓRIOS
@@ -257,10 +255,7 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                     "metodo": metodo_usado
                 }
                 
-                # Alimenta a gaveta do Admin (Hora)
                 dados_hora["detalhes_emails"].append(info_email)
-                
-                # Alimenta a gaveta do Usuário (Turno)
                 dados_turno["detalhes_emails"].append(info_email)
                 dados_turno["arquivos_eml"].append({"nome": nome_anexo, "bytes": raw_email_bytes})
 
@@ -268,11 +263,10 @@ def verificar_e_acionar_fallback(conta, dados_turno, dados_hora):
                 dados_hora["falhas"].append(f"Erro no parseamento '{assunto_orig}': {str(e_msg)}")
 
         mail.expunge()
-        smtp_server.quit()
         mail.logout()
 
     except Exception as e_geral:
-        dados_hora["falhas"].append(f"Falha de Conexão: {str(e_geral)}")
+        dados_hora["falhas"].append(f"Falha de Conexão IMAP Global: {str(e_geral)}")
 
 # ==========================================
 # ENVIO DOS RELATÓRIOS DO USUÁRIO (Às 9h e 18h)
