@@ -40,9 +40,9 @@ export function getSessionCookieOptions(
   //       : undefined;
 
   return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+   httpOnly: true,
+  path: "/",
+  secure: false, // Mude para false se não usar HTTPS local
+  sameSite: "lax", // 'lax' é melhor para desenvolvimento local em HTTP
   };
 }
