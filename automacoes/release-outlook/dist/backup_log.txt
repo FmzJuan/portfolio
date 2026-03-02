@@ -1,1 +1,19 @@
 [26/02/2026 17:20:34] Sistema iniciado. Aguardando comandos.
+[26/02/2026 17:28:46] Sistema iniciado. Aguardando comandos.
+[26/02/2026 18:53:07] Sistema iniciado. Aguardando comandos.
+[26/02/2026 18:53:52] --- INICIANDO ROTINA DE BACKUP ---
+[26/02/2026 18:53:52] Tentando finalizar o Outlook...
+[26/02/2026 18:53:57] Comando de fechamento do Outlook enviado.
+[26/02/2026 18:53:57] Pasta de destino criada: C8
+[26/02/2026 18:53:57] Copiando arquivos de C:\programa-outlook\20-02-26 para G:\Meu Drive\Operacional\Servidor\11 - Adm\3.Ti\Cristina-outlook-auto\C8...
+[27/02/2026 15:38:17] Sistema iniciado. Aguardando comandos.
+[27/02/2026 15:38:40] --- INICIANDO ROTINA DE BACKUP ---
+[27/02/2026 15:38:40] Tentando finalizar o Outlook...
+[27/02/2026 15:38:45] Comando de fechamento do Outlook enviado.
+[27/02/2026 15:38:45] Limite C10 atingido. Limpando pastas antigas (C1 a C10)...
+[27/02/2026 15:38:45] Pasta de destino criada: C1
+[27/02/2026 15:38:45] Copiando arquivos de C:\programa-outlook\20-02-26 para G:\Meu Drive\Operacional\Servidor\11 - Adm\3.Ti\Cristina-outlook-auto\C1...
+[27/02/2026 15:41:41] Sucesso: 3 arquivos copiados.
+[27/02/2026 15:41:41] Removendo arquivos da pasta de origem conforme configurado...
+[27/02/2026 15:41:45] Etapa de remoção finalizada.
+[27/02/2026 15:41:46] --- BACKUP CONCLUÍDO ---

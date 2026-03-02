@@ -197,3 +197,25 @@
     }
   }
 }
+.project-card-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.project-card-link .project-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+}
+
+.project-card-link:hover .project-card {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}
+
+.project-card .learn-more {
+  display: block;
+  margin-top: 15px;
+  font-weight: 600;
+  color: #007bff; /* Ou a cor principal do seu site */
+  text-align: right;
+}

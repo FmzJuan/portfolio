@@ -4,6 +4,8 @@ import Projects from "@/components/Projects";
 import Impact from "@/components/Impact";
 import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
+// CORREÇÃO: O caminho foi ajustado para "subir" um diretório (de 'pages' para 'src')
+
 
 /**
  * Design Philosophy: Modern Tech Minimalism
@@ -20,6 +22,7 @@ export default function Home() {
       <main className="flex-1">
         <Hero />
         <Projects />
+       
         <Impact />
         <Contact />
       </main>

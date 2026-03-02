@@ -1,0 +1,233 @@
+/* Estilo geral da seção do Bot */
+.bot-section {
+  padding: 80px 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #f8f9fa 100%); /* Fundo com leve gradiente verde/cinza */
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Seção Herói */
+.bot-hero {
+  margin-bottom: 60px;
+}
+
+.bot-hero h1 {
+  font-size: 2.8rem;
+  color: #1f2937;
+  margin-bottom: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.bot-hero .subtitle {
+  font-size: 1.2rem;
+  color: #4b5563;
+  max-width: 700px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* Seção de Demonstração */
+/* --- NOVO: CARROSSEL HORIZONTAL --- */
+.carousel-container {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 25px;
+  padding: 20px 20px 40px 20px;
+  margin: 0 -20px; /* Compensa o padding do container para scroll total */
+  
+  /* Esconde a barra de rolagem mas mantém a funcionalidade */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.carousel-container::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.carousel-card {
+  flex: 0 0 320px; /* Largura fixa para manter o design no scroll */
+  scroll-snap-align: center;
+  background-color: #ffffff;
+  border-radius: 20px;
+  padding: 25px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s ease;
+}
+
+.carousel-card:hover {
+  transform: translateY(-5px);
+  border-color: #25D366; /* Realce verde WhatsApp */
+}
+
+/* Cabeçalho do Card */
+.card-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.step-badge {
+  background-color: #25D366;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.card-header h3 {
+  font-size: 1.3rem;
+  color: #1f2937;
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Mockup Celular (Ajustado para o Carrossel) */
+.phone-mockup {
+  border: 5px solid #1f2937;
+  border-radius: 20px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  width: 100%;
+  max-width: 250px;
+  box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+  background-color: #f3f4f6;
+}
+
+.step-image {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+/* Tags de Especificação Chamação */
+.spec-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.tag {
+  background-color: #f0fdf4; /* Fundo verdinho claro */
+  color: #166534; /* Texto verde escuro */
+  border: 1px solid #bbf7d0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+}
+
+.carousel-card p {
+  font-size: 0.95rem;
+  color: #4b5563;
+  line-height: 1.5;
+  text-align: center;
+  margin: 0;
+}
+
+/* Indicador de Deslize */
+.swipe-indicator {
+  text-align: center;
+  margin-top: -10px;
+  margin-bottom: 40px;
+  color: #6b7280;
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+/* --- NOVO: SETAS DE NAVEGAÇÃO DO CARROSSEL --- */
+
+/* Wrapper que segura o carrossel e as setas juntas */
+.carousel-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+/* Garante que o scroll manual ativado pelo React seja suave */
+.carousel-container {
+  scroll-behavior: smooth; 
+}
+
+/* Estilo Base das Setas */
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 50px;
+  height: 50px;
+  background-color: #ffffff;
+  color: #25D366; /* Verde WhatsApp */
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.carousel-arrow:hover {
+  background-color: #25D366;
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
+}
+
+.carousel-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+/* Posições das Setas */
+.carousel-arrow.left {
+  left: -20px; /* Joga um pouco para fora do container para não cobrir o card */
+}
+
+.carousel-arrow.right {
+  right: -20px;
+}
+
+/* Responsividade: Esconde as setas em celulares e mostra o texto "Deslize" */
+@media (max-width: 768px) {
+  .carousel-arrow {
+    display: none; /* Em telas pequenas, o usuário apenas desliza o dedo */
+  }
+  
+  .mobile-only {
+    display: block;
+  }
+}
+
+/* Esconde o texto "Deslize" no Desktop (já que temos as setas) */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+}

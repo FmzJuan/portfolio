@@ -6,11 +6,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 
-
+// 1. Importe a nova página do produto
+import BotProductPage from "./pages/BotProductPage";
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+          <Route path={"/bot-vendas-whatsapp"} component={BotProductPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

@@ -1,51 +1,55 @@
 import ProjectCard from "./ProjectCard";
+import React from 'react';
+import { Link } from "wouter";
 
+// 1. Unificamos a lista de projetos com as novas propriedades
 const projects = [
   {
     id: 1,
     title: "Automação de Publicação em WordPress com n8n",
     description: "Sistema completo de automação para publicar conteúdo no WordPress com processamento de imagens, SEO e distribuição em redes sociais.",
-    image: "/images/n8n-workflow.jpg",
-    problem: "Processo manual de publicação de conteúdo no WordPress era repetitivo, demorado e propenso a erros. Faltava padronização e integração com redes sociais.",
-    solution: "Desenvolvemos um workflow n8n que automatiza: coleta de dados, processamento de imagens, otimização SEO, publicação no WordPress e distribuição em Facebook/Twitter.",
+    image: "/images/n8n-workflow.png",
+    problem: "Processo manual de publicação de conteúdo no WordPress era repetitivo, demorado e propenso a erros.",
+    solution: "Desenvolvemos um workflow n8n que automatiza: coleta de dados, processamento de imagens e otimização SEO.",
     impact: [
       { label: "Tempo Economizado", value: "15h/mês" },
       { label: "Publicações", value: "+300%" },
-      { label: "Erros Reduzidos", value: "-95%" },
     ],
     technologies: ["n8n", "WordPress", "APIs", "Node.js"],
     githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/automacoes/n8n-publicacao-wordpress",
+    isBotProject: false
   },
   {
     id: 2,
     title: "Organização e Normalização de Dados no Google Sheets",
-    description: "Automação inteligente para organizar, normalizar e deduplica dados de múltiplas fontes (Google Forms, inserções manuais) em tempo real.",
+    description: "Automação inteligente para organizar, normalizar e deduplica dados de múltiplas fontes em tempo real.",
     image: "/images/google-sheets-data.jpg",
-    problem: "Dados chegavam de múltiplas fontes com inconsistências: CPFs duplicados, datas faltantes, ordem cronológica incorreta. Análise confiável era impossível.",
-    solution: "Desenvolvemos funções Google Apps Script que: organizam cronologicamente, preenchem datas automaticamente, removem duplicatas e mantêm apenas o registro mais recente.",
+    problem: "Dados chegavam de múltiplas fontes com inconsistências: CPFs duplicados e datas faltantes.",
+    solution: "Desenvolvemos funções Google Apps Script que organizam cronologicamente e removem duplicatas.",
     impact: [
       { label: "Duplicatas Removidas", value: "100%" },
-      { label: "Tempo Manual", value: "-30min" },
       { label: "Confiabilidade", value: "+99%" },
     ],
     technologies: ["Google Apps Script", "Google Sheets", "JavaScript"],
     githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/automacoes/organizacao-dados-sheets",
+    isBotProject: false
   },
   {
-    id: 3,
-    title: "Envio de Cotações Personalizadas por E-mail",
-    description: "Interface intuitiva que permite enviar cotações profissionais e personalizadas diretamente do Google Sheets, sem conhecimento técnico.",
-    image: "/images/email-automation.jpg",
-    problem: "Envio de cotações era manual, repetitivo e propenso a erros. Faltava padronização visual e era necessário conhecimento técnico para enviar.",
-    solution: "Criamos um modal HTML integrado ao Google Sheets que permite buscar registros, personalizar e enviar e-mails profissionais com logo, cores corporativas e dados dinâmicos.",
+    id: 4, 
+    title: "Bot de Vendas para WhatsApp",
+    description: "Uma solução de automação completa para empresas que vendem por delivery, com cardápio digital, carrinho e checkout via PIX.",
+    // ALTERAÇÃO AQUI: Atualizado para o caminho correto da sua imagem
+    image: "/images/botatendimento.png", 
+    problem: "Atendimento manual lento e perda de vendas por demora na resposta e falta de fechamento automático.",
+    solution: "Bot inteligente com fluxo de compra completo integrado ao WhatsApp, reduzindo o tempo de atendimento a zero.",
     impact: [
-      { label: "Tempo/Cotação", value: "-5min" },
-      { label: "Taxa de Envio", value: "+80%" },
-      { label: "Profissionalismo", value: "100%" },
+      { label: "Atendimento", value: "24/7" },
+      { label: "Conversão", value: "+45%" },
     ],
-    technologies: ["Google Apps Script", "HTML/CSS", "Gmail API"],
-    githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/automacoes/sheets-email-personalizado",
-  },
+    technologies: ["Node.js", "Docker", "React"],
+    link: "/bot-vendas-whatsapp", 
+    isBotProject: true 
+  }
 ];
 
 export default function Projects() {
@@ -64,22 +68,41 @@ export default function Projects() {
         </div>
 
         {/* Projects Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              title={project.title}
-              description={project.description}
-              image={project.image}
-              problem={project.problem}
-              solution={project.solution}
-              impact={project.impact}
-              technologies={project.technologies}
-              githubUrl={project.githubUrl}
-            />
-          ))}
-        </div>
-
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+  {projects.map((project) => (
+    project.isBotProject ? (
+      <Link href={project.link!} key={project.id}>
+        <a className="block h-full transition-transform hover:scale-[1.02] active:scale-[0.98]">
+          <ProjectCard
+            title={project.title}
+            description={project.description}
+            image={project.image}
+            problem={project.problem}
+            solution={project.solution}
+            // VERIFIQUE SE ESTAS DUAS LINHAS ABAIXO ESTÃO ASSIM:
+            impact={project.impact} 
+            technologies={project.technologies}
+          />
+          <div className="text-center mt-2 text-blue-600 font-medium text-sm">
+            Clique para saber mais →
+          </div>
+        </a>
+      </Link>
+    ) : (
+      <ProjectCard
+        key={project.id}
+        title={project.title}
+        description={project.description}
+        image={project.image}
+        problem={project.problem}
+        solution={project.solution}
+        impact={project.impact}
+        technologies={project.technologies}
+        githubUrl={project.githubUrl}
+      />
+    )
+  ))}
+</div>
         {/* CTA */}
         <div className="mt-16 text-center">
           <p className="text-muted-foreground mb-4">
