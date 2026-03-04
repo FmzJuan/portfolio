@@ -1,4 +1,4 @@
-name: CI-Qualidade-Site
+name: CI-Geral-Portfolio
 
 on:
   push:
@@ -7,27 +7,54 @@ on:
     branches: [ main ]
 
 jobs:
-  build-check:
+  # --- VERIFICAÇÃO DO SITE ---
+  job-site:
     runs-on: ubuntu-latest
-    # AQUI ESTÁ O SEGREDO: dizemos ao robô para entrar na pasta do site antes de rodar os comandos
-    defaults:
-      run:
-        working-directory: ./site/juan-portfolio-completo
-
     steps:
-      - name: Checkout do Código
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          # Precisamos apontar onde está o package-lock.json para o cache funcionar
           cache-dependency-path: ./site/juan-portfolio-completo/package-lock.json
 
-      - name: Instalar Dependências
-        run: npm install
+      - name: Install & Build Site
+        run: |
+          cd site/juan-portfolio-completo
+          npm install --legacy-peer-deps
+          npm run build
 
-      - name: Testar o Build
-        run: npm run build
+  # --- VERIFICAÇÃO DO CRM ---
+  job-crm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./site/crm-wpp/package-lock.json
+
+      - name: Install & Build CRM
+        run: |
+          cd site/crm-wpp
+          npm install --legacy-peer-deps
+          npm run build
+
+  # --- VERIFICAÇÃO DO BOT (BAILEYS) ---
+  job-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./bots/bot-wpp-balleys/package-lock.json
+
+      - name: Install & Check Bot
+        run: |
+          cd bots/bot-wpp-balleys
+          npm install --legacy-peer-deps
+          # Se tiveres um comando de build ou lint no bot, adiciona aqui:
+          # npm run build
