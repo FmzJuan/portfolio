@@ -1,0 +1,32 @@
+name: CI-Qualidade-Site
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar Dependências
+        run: npm install
+
+      - name: Verificar Tipagem (TypeScript)
+        # Se você usa TS, isso garante que não há erros de tipo
+        run: npx tsc --noEmit 
+
+      - name: Testar o Build do Next.js
+        # Isso simula a criação do site para ver se ele "quebra"
+        run: npm run build
