@@ -26,19 +26,10 @@ jobs:
           
           # 1. Build do Front-end
           npx vite build
-          
-          # 2. Build do Servidor - Tentando os 2 caminhos mais comuns
-          if [ -f "./server/index.ts" ]; then
-            echo "Achei na raiz do projeto!"
-            npx esbuild ./server/index.ts --bundle --platform=node --format=esm --outdir=dist --external:fsevents
-          elif [ -f "./src/server/index.ts" ]; then
-            echo "Achei dentro da pasta SRC!"
-            npx esbuild ./src/server/index.ts --bundle --platform=node --format=esm --outdir=dist --external:fsevents
-          else
-            echo "ERRO: Não achei o arquivo de servidor. Listando pastas do projeto (ignorando node_modules):"
-            find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules*'
-            exit 1
-          fi
+        env:
+          # Variáveis para evitar os avisos do Vite no build (opcional, mas recomendado)
+          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
+          VITE_ANALYTICS_WEBSITE_ID: ${{ secrets.VITE_ANALYTICS_WEBSITE_ID }}
 
   # --- VERIFICAÇÃO DO CRM ---
   job-crm:
