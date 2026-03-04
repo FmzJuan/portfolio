@@ -23,10 +23,21 @@ jobs:
           cd site/juan-portfolio-completo
           npm install --legacy-peer-deps
           chmod -R +x node_modules/.bin
-          # Rodamos o Vite (Front-end)
+          
+          # 1. Build do Front-end
           npx vite build
-          # Rodamos o Esbuild (Server) corrigido sem o erro de 'external'
-          npx esbuild server/index.ts --bundle --platform=node --format=esm --outdir=dist --external:fsevents
+          
+          # 2. Build do Servidor (ajustado para encontrar o arquivo)
+          # Tentamos encontrar o index.ts dentro da pasta server ou na raiz
+          if [ -f "./server/index.ts" ]; then
+            npx esbuild ./server/index.ts --bundle --platform=node --format=esm --outdir=dist --external:fsevents
+          elif [ -f "./server/index.js" ]; then
+            npx esbuild ./server/index.js --bundle --platform=node --format=esm --outdir=dist --external:fsevents
+          else
+            echo "Arquivo de servidor não encontrado em ./server/index.ts"
+            ls -R # Isso vai listar os arquivos no log se der erro para sabermos onde ele está
+            exit 1
+          fi
 
   # --- VERIFICAÇÃO DO CRM ---
   job-crm:
