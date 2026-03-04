@@ -22,10 +22,11 @@ jobs:
         run: |
           cd site/juan-portfolio-completo
           npm install --legacy-peer-deps
-          # Força permissão de execução em todos os binários do projeto
           chmod -R +x node_modules/.bin
-          # Agora sim, roda o build
-          npx vite build && npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+          # Rodamos o Vite (Front-end)
+          npx vite build
+          # Rodamos o Esbuild (Server) corrigido sem o erro de 'external'
+          npx esbuild server/index.ts --bundle --platform=node --format=esm --outdir=dist --external:fsevents
 
   # --- VERIFICAÇÃO DO CRM ---
   job-crm:
