@@ -21,15 +21,11 @@ jobs:
       - name: Install & Build Site
         run: |
           cd site/juan-portfolio-completo
-          npm install --legacy-peer-deps
-          chmod -R +x node_modules/.bin
-          
-          # 1. Build do Front-end
           npx vite build
         env:
           # Variáveis para evitar os avisos do Vite no build (opcional, mas recomendado)
-          VITE_ANALYTICS_ENDPOINT: ${{ secrets.VITE_ANALYTICS_ENDPOINT }}
-          VITE_ANALYTICS_WEBSITE_ID: ${{ secrets.VITE_ANALYTICS_WEBSITE_ID }}
+          VITE_ANALYTICS_ENDPOINT: https://analytics.umami.is
+          VITE_ANALYTICS_WEBSITE_ID: 00000000-0000-0000-0000-000000000000
 
   # --- VERIFICAÇÃO DO CRM ---
   job-crm:
