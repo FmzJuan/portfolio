@@ -20,8 +20,15 @@ jobs:
 
       - name: Install & Build Site
         run: |
-          cd site/juan-portfolio-completo
-          npx vite build
+         cd site/juan-portfolio-completo
+          # 1. Instala as dependências
+          npm install --legacy-peer-deps
+          
+          # 2. CORREÇÃO: Garante permissão de execução para os binários (Vite, etc)
+          chmod -R +x node_modules/.bin
+          
+          # 3. Roda o build usando o caminho direto ou npx
+          ./node_modules/.bin/vite build
         env:
           # Variáveis para evitar os avisos do Vite no build (opcional, mas recomendado)
           VITE_ANALYTICS_ENDPOINT: https://analytics.umami.is
