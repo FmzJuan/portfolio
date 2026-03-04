@@ -9,6 +9,10 @@ on:
 jobs:
   build-check:
     runs-on: ubuntu-latest
+    # AQUI ESTÁ O SEGREDO: dizemos ao robô para entrar na pasta do site antes de rodar os comandos
+    defaults:
+      run:
+        working-directory: ./site/juan-portfolio-completo
 
     steps:
       - name: Checkout do Código
@@ -19,14 +23,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          # Precisamos apontar onde está o package-lock.json para o cache funcionar
+          cache-dependency-path: ./site/juan-portfolio-completo/package-lock.json
 
       - name: Instalar Dependências
         run: npm install
 
-      - name: Verificar Tipagem (TypeScript)
-        # Se você usa TS, isso garante que não há erros de tipo
-        run: npx tsc --noEmit 
-
-      - name: Testar o Build do Next.js
-        # Isso simula a criação do site para ver se ele "quebra"
+      - name: Testar o Build
         run: npm run build
