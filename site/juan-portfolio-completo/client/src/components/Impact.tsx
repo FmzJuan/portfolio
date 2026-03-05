@@ -62,15 +62,7 @@ export default function Impact() {
         </div>
 
         {/* Impact Image */}
-        <div className="mt-16">
-          <div className="relative rounded-lg overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100 p-8">
-            <img
-              src="/images/impact-metrics.jpg"
-              alt="Business Impact Metrics"
-              className="w-full h-auto rounded-lg"
-            />
-          </div>
-        </div>
+        
 
         {/* Benefits Section */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">

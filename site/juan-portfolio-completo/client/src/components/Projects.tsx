@@ -17,8 +17,10 @@ const projects = [
     ],
     technologies: ["n8n", "WordPress", "APIs", "Node.js"],
     githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/automacoes/n8n-publicacao-wordpress",
-    isBotProject: false
+    link: "/n8n-Wordpress",
+    isBotProject: true
   },
+
   {
     id: 2,
     title: "Organização e Normalização de Dados no Google Sheets",
@@ -32,8 +34,10 @@ const projects = [
     ],
     technologies: ["Google Apps Script", "Google Sheets", "JavaScript"],
     githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/automacoes/organizacao-dados-sheets",
-    isBotProject: false
+    link: "/Google-sheets-organizasao",
+    isBotProject: true
   },
+
   {
     id: 4, 
     title: "Bot de Vendas para WhatsApp",
@@ -47,6 +51,7 @@ const projects = [
       { label: "Conversão", value: "+45%" },
     ],
     technologies: ["Node.js", "Docker", "React"],
+    githubUrl: "https://github.com/FmzJuan/portfolio/tree/main/bot-vendas-whatsapp",
     link: "/bot-vendas-whatsapp", 
     isBotProject: true 
   }
@@ -82,6 +87,7 @@ export default function Projects() {
             // VERIFIQUE SE ESTAS DUAS LINHAS ABAIXO ESTÃO ASSIM:
             impact={project.impact} 
             technologies={project.technologies}
+            githubUrl={project.githubUrl!}
           />
           <div className="text-center mt-2 text-blue-600 font-medium text-sm">
             Clique para saber mais →
@@ -98,7 +104,7 @@ export default function Projects() {
         solution={project.solution}
         impact={project.impact}
         technologies={project.technologies}
-        githubUrl={project.githubUrl}
+        githubUrl={project.githubUrl!}
       />
     )
   ))}

@@ -1,0 +1,27 @@
+/* estilos básicos para a página do Google Sheets */
+.gs-section {
+  padding: 80px 20px;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+}
+
+.gs-section h1 {
+  font-size: 2.5rem;
+  color: #1e3a8a;
+  margin-bottom: 20px;
+  font-weight: 700;
+}
+
+.gs-section .subtitle {
+  font-size: 1.2rem;
+  color: #4b5563;
+  max-width: 700px;
+  margin: 0 auto 40px;
+  line-height: 1.6;
+}
+
+.gs-section p {
+  color: #475569;
+  margin-bottom: 1rem;
+}

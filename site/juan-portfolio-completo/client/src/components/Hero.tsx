@@ -14,7 +14,7 @@ export default function Hero() {
       {/* Background Image */}
       <div className="absolute inset-0 opacity-30">
         <img
-          src="/images/hero-automation.jpg"
+          src="/images/images.jpg"
           alt="Automation Background"
           className="w-full h-full object-cover"
         />
@@ -29,7 +29,7 @@ export default function Hero() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 rounded-full">
             <span className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
-            <span className="text-sm font-medium text-blue-900">Especialista em Automação</span>
+            <span className="text-sm font-medium text-blue-900">Soluções com Automação</span>
           </div>
 
           {/* Heading */}

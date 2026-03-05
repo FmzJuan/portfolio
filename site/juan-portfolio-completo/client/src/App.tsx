@@ -8,11 +8,16 @@ import Home from "./pages/Home";
 
 // 1. Importe a nova página do produto
 import BotProductPage from "./pages/BotProductPage";
+import GoogleSheetPage from "./pages/GoogleSheetPage";
+import N8nWordpressPage from "./pages/N8nWordpressPage";
+
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-          <Route path={"/bot-vendas-whatsapp"} component={BotProductPage} />
+      <Route path="/bot-vendas-whatsapp" component={BotProductPage} />
+      <Route path="/Google-sheets-organizasao" component={GoogleSheetPage} />
+      <Route path="/n8n-Wordpress" component={N8nWordpressPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
