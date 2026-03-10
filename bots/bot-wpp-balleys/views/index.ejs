@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Projeto Charlie - Dashboard</title>
+    <link rel="stylesheet" href="/style.css"> 
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+</head>
+<body style="background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 0;">
+    
+    <header style="border-bottom: 2px solid #333; padding: 20px; background: #1a1a1a;">
+        <h1 style="letter-spacing: 2px;">PROJETO CHARLIE</h1>
+        <div id="status-badge" style="background: #e74c3c; display: inline-block; padding: 8px 20px; border-radius: 20px; font-weight: bold; transition: 0.5s;">OFFLINE</div>
+    </header>
+
+    <main style="margin-top: 50px; padding: 20px;">
+        
+        <div id="qrcode-container" style="background: white; padding: 30px; display: inline-block; border-radius: 15px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+            <p style="color: #333; font-weight: bold; margin-bottom: 20px;">ESCANEIE PARA CONECTAR</p>
+            <canvas id="canvas-qr" style="max-width: 250px;"></canvas>
+            <p id="qr-msg" style="color: #666; font-size: 12px; margin-top: 10px;">Aguardando o servidor gerar o código...</p>
+        </div>
+
+        <div style="margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 15px;">
+            <a href="<%= sheetLink %>" target="_blank" 
+               style="background: #27ae60; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; width: 300px; border: 2px solid transparent; transition: 0.3s;"
+               onmouseover="this.style.background='#2ecc71'" onmouseout="this.style.background='#27ae60'">
+               📊 ACESSAR PLANILHA CRM
+            </a>
+            
+            <button onclick="window.location.href='/gerar-pdf-manual'" 
+                    style="background: transparent; color: #2980b9; padding: 15px 40px; border: 2px solid #2980b9; border-radius: 8px; cursor: pointer; font-weight: bold; width: 300px; transition: 0.3s;"
+                    onmouseover="this.style.background='#2980b9'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#2980b9'">
+                📄 BAIXAR RELATÓRIO PDF
+            </button>
+        </div>
+    </main>
+
+    <script>
+        const socket = io();
+        const badge = document.getElementById('status-badge');
+        const qrContainer = document.getElementById('qrcode-container');
+        const canvas = document.getElementById('canvas-qr');
+
+        // Escuta o QR Code vindo do WhatsApp.js (Servidor)
+        socket.on('qr', (qrText) => {
+            console.log("Recebendo novo QR Code...");
+            document.getElementById('qr-msg').innerText = "Código atualizado!";
+            
+            // Transforma o texto do Baileys em imagem no Canvas
+            QRCode.toCanvas(canvas, qrText, { width: 250 }, function (error) {
+                if (error) console.error(error);
+                console.log('QR Code renderizado com sucesso!');
+            });
+        });
+
+        // Escuta a mudança de status
+        socket.on('status', (status) => {
+            if(status === 'conectado') {
+                badge.style.backgroundColor = '#2ecc71';
+                badge.innerText = 'ONLINE';
+                qrContainer.style.display = 'none'; // Esconde o QR se já conectou
+            } else {
+                badge.style.backgroundColor = '#e74c3c';
+                badge.innerText = 'OFFLINE';
+                qrContainer.style.display = 'inline-block';
+            }
+        });
+    </script>
+</body>
+</html>
