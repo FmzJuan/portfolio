@@ -52,8 +52,13 @@ jobs:
           npm run build
 
   # --- VERIFICAÇÃO DO BOT (BAILEYS) ---
+
   job-bot:
     runs-on: ubuntu-latest
+    # ⚠️ MUITO IMPORTANTE: Dá permissão para a Action salvar no GHCR
+    permissions:
+      contents: read
+      packages: write 
     steps:
       - uses: actions/checkout@v4
       
@@ -74,9 +79,19 @@ jobs:
           node --check index.js
           node --check Engine/whatsapp.js
           node --check Engine/sheets.js
+          
+      # ----- GHCR ------
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker Image (Validação do Passo 5)
-        run: |
-          cd bots/bot-wpp-balleys
-          # Tenta construir a imagem Docker. Se o Dockerfile estiver errado, o GitHub avisa!
-          docker build -t charlie-bot-teste .
+      # Este passo FAZ O BUILD e FAZ O PUSH para a nuvem de uma vez só
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./bots/bot-wpp-balleys
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/charlie-bot:latest

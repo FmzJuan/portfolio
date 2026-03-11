@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_charlie
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    # AQUI ESTÁ O SEGREDO: Ele baixa do seu GitHub, não constrói localmente
+    image: ghcr.io/FmzJuan/charlie-bot:latest
+    container_name: bot_charlie_app
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    volumes:
+      - ./auth_info_baileys:/app/auth_info_baileys
+
+  # O ROBÔ QUE ATUALIZA SOZINHO
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 bot_charlie_app
+    # Ele checa a cada 300 segundos (5 minutos) se tem versão nova no GitHub
+
+volumes:
+  postgres_data:
