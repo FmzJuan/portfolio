@@ -55,7 +55,7 @@ jobs:
 
   job-bot:
     runs-on: ubuntu-latest
-    # ⚠️ MUITO IMPORTANTE: Dá permissão para a Action salvar no GHCR
+    #  MUITO IMPORTANTE: Dá permissão para a Action salvar no GHCR
     permissions:
       contents: read
       packages: write 
@@ -94,4 +94,5 @@ jobs:
         with:
           context: ./bots/bot-wpp-balleys
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/charlie-bot:latest
+          # CORREÇÃO: Removida a variável, inserido 'fmzjuan' todo em minúsculo
+          tags: ghcr.io/fmzjuan/charlie-bot:latest
