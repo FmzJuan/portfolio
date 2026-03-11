@@ -1,11 +1,11 @@
 # Estágio 1: Build (Instala as dependências de forma isolada)
-FROM node:18-slim AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
 # Estágio 2: Execução (Imagem final, leve e segura)
-FROM node:18-slim
+FROM node:20-slim
 WORKDIR /app
 
 # Instala ferramentas necessárias para o Puppeteer/Baileys caso precise futuramente
