@@ -19,8 +19,9 @@ const io = new Server(server);
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
+// Atualizado dia 11/03:
 app.use(session({ 
-    secret: 'charlie-secret', 
+    secret: process.env.SESSION_SECRET, 
     resave: false, 
     saveUninitialized: true 
 }));
@@ -30,10 +31,10 @@ module.exports = { io };
 
 // Rota de Login
 app.get('/login', (req, res) => res.render('login'));
+// Atualize a rota de login:
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
-    // Sugestão: Use variáveis de ambiente para LOGIN e SENHA futuramente
-    if (username === 'admin' && password === '123') { 
+    if (username === process.env.PANEL_USER && password === process.env.PANEL_PASS) { 
         req.session.logged = true;
         return res.redirect('/');
     }

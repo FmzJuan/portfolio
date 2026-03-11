@@ -56,15 +56,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: ./bots/bot-wpp-balleys/package-lock.json
 
-      - name: Install & Check Bot
+      - name: Install Dependencies
         run: |
           cd bots/bot-wpp-balleys
           npm install --legacy-peer-deps
-          # Se tiveres um comando de build ou lint no bot, adiciona aqui:
-          # npm run build
+
+      - name: Check Code Syntax (Verifica erros de digitação e chaves abertas)
+        run: |
+          cd bots/bot-wpp-balleys
+          node --check index.js
+          node --check Engine/whatsapp.js
+          node --check Engine/sheets.js
+
+      - name: Build Docker Image (Validação do Passo 5)
+        run: |
+          cd bots/bot-wpp-balleys
+          # Tenta construir a imagem Docker. Se o Dockerfile estiver errado, o GitHub avisa!
+          docker build -t charlie-bot-teste .

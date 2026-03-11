@@ -1,0 +1,23 @@
+# Estágio 1: Build (Instala as dependências de forma isolada)
+FROM node:18-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+
+# Estágio 2: Execução (Imagem final, leve e segura)
+FROM node:18-slim
+WORKDIR /app
+
+# Instala ferramentas necessárias para o Puppeteer/Baileys caso precise futuramente
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# Copia apenas os módulos prontos do Estágio 1
+COPY --from=builder /app/node_modules ./node_modules
+# Copia o restante do seu código
+COPY . .
+
+# Expõe a porta da sua Dashboard
+EXPOSE 3000
+
+# Comando que inicia o sistema
+CMD ["node", "index.js"]
