@@ -28,9 +28,10 @@ services:
       - .env
     environment:
       - DB_HOST=db_postgres
-    volumes:
-      - .:/app
-      - /app/node_modules
+    # AQUI ESTÁ A CORREÇÃO DA PORTA
+    ports:
+      - "3000:3000"
+    # OS VOLUMES DAQUI FORAM REMOVIDOS PARA NÃO APAGAR SEU CÓDIGO
 
 volumes:
   bot_pg_data:
