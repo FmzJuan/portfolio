@@ -19,8 +19,7 @@ async function agendarMensagens(cliente) {
 
   // 1. Agendamento de 24 horas (Pós-venda imediato)
   // 24h * 60m * 60s * 1000ms
-  const delay24h = 24 * 60 * 60 * 1000; 
-  
+const delay24h = 10 * 1000; // 10 SEGUNDOS (Perfeito para mostrar na hora)  
   await posVendaQueue.add(
     'feedback_24h',
     { telefone, nome, tipo: '24h' },
@@ -29,8 +28,7 @@ async function agendarMensagens(cliente) {
 
   // 2. Agendamento de 6 meses (Recorrência)
   // 180 dias * 24h * 60m * 60s * 1000ms
-  const delay6meses = 180 * 24 * 60 * 60 * 1000;
-
+const delay6meses = 30 * 1000; // 30 SEGUNDOS (Para ela ver que o segundo agendamento também funciona)
   await posVendaQueue.add(
     'revisao_6meses',
     { telefone, nome, tipo: '6meses' },
