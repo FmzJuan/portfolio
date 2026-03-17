@@ -1,6 +1,5 @@
 // Chat/RissatoMotors/fluxo.js
 const { salvarNoSheets } = require('../../Functions/googleSheets');
-
 async function executar(sock, msg) {
     const textoMensagem = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
     const numeroCliente = msg.key.remoteJid;
