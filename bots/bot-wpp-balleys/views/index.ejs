@@ -35,7 +35,26 @@
                 📄 BAIXAR RELATÓRIO PDF
             </button>
         </div>
-    </main>
+
+        <div style="margin-top: 40px; background: #1a1a1a; padding: 30px; border-radius: 15px; border: 2px solid #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.2); width: 80%; max-width: 600px; display: inline-block; text-align: center;">
+            <h3 style="color: #2ecc71; margin-bottom: 10px;">🚘 Finalizar Serviço</h3>
+            <p style="color: #aaa; font-size: 14px; margin-bottom: 25px;">O sistema agendará o pós-venda (24h) e o retorno (6 meses) automaticamente.</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                <input type="text" id="nomeCliente" placeholder="Nome do Cliente" 
+                       style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
+                
+                <input type="text" id="telCliente" placeholder="Telefone (Ex: 5511999999999)" 
+                       style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
+                
+                <button onclick="dispararPosVenda()" 
+                        style="width: 100%; background: #27ae60; color: white; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s;"
+                        onmouseover="this.style.background='#2ecc71'" onmouseout="this.style.background='#27ae60'">
+                    AGENDAR NO SISTEMA
+                </button>
+            </div>
+        </div>
+        </main>
 
     <script>
         const socket = io();
@@ -67,6 +86,39 @@
                 qrContainer.style.display = 'inline-block';
             }
         });
+
+        // A função que o botão chama
+        async function dispararPosVenda() {
+            const nome = document.getElementById('nomeCliente').value;
+            const telefone = document.getElementById('telCliente').value;
+
+            if (!nome || !telefone) {
+                alert("Por favor, preencha o nome e o telefone!");
+                return;
+            }
+
+            // Avisa o "garçom" (a sua API no Node.js)
+            try {
+                const resposta = await fetch('/api/finalizar-servico', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nome: nome, telefone: telefone })
+                });
+
+                const dados = await resposta.json();
+
+                if (dados.success) {
+                    alert("✅ Sucesso! Mensagens de acompanhamento agendadas no Redis.");
+                    // Limpa os campos
+                    document.getElementById('nomeCliente').value = '';
+                    document.getElementById('telCliente').value = '';
+                } else {
+                    alert("❌ Erro ao agendar: " + dados.error);
+                }
+            } catch (erro) {
+                alert("Erro de comunicação com o servidor.");
+            }
+        }
     </script>
 </body>
 </html>

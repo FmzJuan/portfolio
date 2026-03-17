@@ -1,9 +1,11 @@
 require('dotenv').config();
+const fs = require('fs');
 const { connectToWhatsApp } = require('./Engine/whatsapp');
 const { query } = require('./DataBase/conection');
-const { salvarNoSheets } = require('./Engine/sheets.js');
 const { gerarRelatorioPDF } = require('./Engine/report.js');
-const fs = require('fs');
+const fluxoOficina = require('./Chat/RissatoMotors/fluxo');
+const { iniciarWorker } = require('./Chat/RissatoMotors/worker');
+const { agendarMensagens } = require('./Chat/RissatoMotors/scheduler');
 
 const express = require('express');
 const http = require('http');
@@ -14,6 +16,8 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+
 
 // Configurações da Dashboard
 app.set('view engine', 'ejs');
@@ -45,8 +49,28 @@ app.post('/login', (req, res) => {
 app.get('/', (req, res) => {
     if (!req.session.logged) return res.redirect('/login');
     res.render('index', { 
-        sheetLink: `https://docs.google.com/spreadsheets/d/${process.env.SHEET_ID}` 
-    });
+    sheetLink: `https://docs.google.com/spreadsheets/d/${process.env.SHEET_ID}`,
+    nomeCliente: process.env.CLIENTE_NOME || 'Dashboard'
+});
+});
+
+//API BTN 
+app.post('/api/finalizar-servico', express.json(), async (req, res) => {
+    try {
+        const { nome, telefone } = req.body;
+        
+        // Joga no Scheduler (que vai pro Redis)
+        await agendarMensagens({
+            nome: nome,
+            telefone: telefone,
+            dataSaida: new Date().toLocaleDateString()
+        });
+
+        res.json({ success: true, message: "Agendado no Redis com sucesso!" });
+    } catch (error) {
+        console.error("Erro na API de agendamento:", error);
+        res.status(500).json({ success: false, error: "Erro ao agendar" });
+    }
 });
 
 // Função Principal do Bot
@@ -54,6 +78,11 @@ async function start() {
     console.log("🚀 Ligando o motor, preparando banco e planilhas...");
 
     await connectToWhatsApp(async (sock, msg, onlySave = false) => {
+        // === GATILHO DO MÓDULO OFICINA (Adicione este bloco) ===
+        if (process.env.TIPO_SERVICO === 'oficina') {
+            await fluxoOficina.executar(sock, msg);
+            return; // O 'return' impede que ele continue o fluxo genérico abaixo
+        }
         const from = msg.key.remoteJid;
         const nome = msg.pushName || "Cliente";
         const texto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";

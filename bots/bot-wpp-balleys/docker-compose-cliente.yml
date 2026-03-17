@@ -14,8 +14,17 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis_charlie
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   app:
-    # AQUI ESTÁ O SEGREDO: Ele baixa do seu GitHub, não constrói localmente
     image: ghcr.io/FmzJuan/charlie-bot:latest
     container_name: bot_charlie_app
     restart: always
@@ -25,17 +34,17 @@ services:
       - .env
     depends_on:
       - db
+      - redis
     volumes:
       - ./auth_info_baileys:/app/auth_info_baileys
 
-  # O ROBÔ QUE ATUALIZA SOZINHO
   watchtower:
     image: containrrr/watchtower
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 300 bot_charlie_app
-    # Ele checa a cada 300 segundos (5 minutos) se tem versão nova no GitHub
 
 volumes:
   postgres_data:
+  redis_data:        # Adicionado volume do Redis para persistência

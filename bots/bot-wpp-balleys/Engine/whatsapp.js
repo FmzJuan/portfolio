@@ -7,6 +7,7 @@ const {
 const qrcode = require("qrcode-terminal");
 const pino = require("pino");
 const path = require("path");
+const { iniciarWorker } = require('../Chat/RissatoMotors/worker');
 
 async function connectToWhatsApp(onMessage) {
     // 1. Importa o socket da Dashboard (index.js)
@@ -23,11 +24,12 @@ async function connectToWhatsApp(onMessage) {
     const sock = makeWASocket({
         version,
         auth: state,
-        printQRInTerminal: false, // Vamos imprimir manualmente abaixo
+        printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
         browser: ["Ubuntu", "Chrome", "120.0.6099.129"], 
         markOnlineOnConnect: true,
     });
+    iniciarWorker(sock);
 
     // 4. Monitora Conexão e envia para o IO (Dashboard)
     sock.ev.on('connection.update', (update) => {
