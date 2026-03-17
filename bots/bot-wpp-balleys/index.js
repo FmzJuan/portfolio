@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { connectToWhatsApp } = require('./Engine/whatsapp');
+const { salvarNoSheets } = require('./Functions/googleSheets');
 const { query } = require('./DataBase/conection');
 const { gerarRelatorioPDF } = require('./Engine/report.js');
 const fluxoOficina = require('./Chat/RissatoMotors/fluxo');
