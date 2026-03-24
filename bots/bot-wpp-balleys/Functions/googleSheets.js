@@ -9,7 +9,8 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-const MODO_SIMULACAO = true; // Mude para false quando quiser enviar de verdade
+// PUXA O MODO DE SIMULAÇÃO DO .ENV (Se não existir, por segurança assume como true)
+const MODO_SIMULACAO = process.env.MODO_SIMULACAO !== 'false'; 
 
 /**
  * Função Auxiliar para Log de Simulação
@@ -27,7 +28,6 @@ function logSimulacao(cliente, mensagem) {
  * Executa a campanha de pós-venda
  */
 async function processarCampanhaPosVenda(sock) { 
-    // CORREÇÃO 1: Você precisa buscar os clientes antes de iniciar o loop
     const clientes = await obterClientesPosVenda();
 
     if (clientes.length === 0) {
@@ -39,13 +39,14 @@ async function processarCampanhaPosVenda(sock) {
         const mensagem = `Olá ${cliente.nome}, tudo bem? Aqui é da oficina. Notamos que seu último serviço foi em ${cliente.dataCadastro}. Gostaria de agendar uma revisão?`;
 
         if (MODO_SIMULACAO) {
-            // CORREÇÃO 2: Agora a função logSimulacao existe acima
             logSimulacao(cliente, mensagem);
         } else {
+            console.log(`🚀 [DISPARO REAL] Enviando para: ${cliente.nome} (${cliente.numeroJid})`);
+            
             // Envio real pelo Baileys
             await sock.sendMessage(cliente.numeroJid, { text: mensagem });
             
-            // Delay anti-ban (30 segundos)
+            // Delay anti-ban (30 segundos entre cada mensagem real)
             await new Promise(resolve => setTimeout(resolve, 30000));
         }
     }
@@ -78,7 +79,6 @@ async function salvarNoSheets(dados) {
     try {
         const spreadsheetId = process.env.SHEET_ID;
         
-        // Verifica se o ID foi carregado do .env
         if (!spreadsheetId) {
             console.error("❌ ERRO: SHEET_ID não definido no .env");
             return;
@@ -94,7 +94,7 @@ async function salvarNoSheets(dados) {
 
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Página1!A2', // Nome da aba de logs automáticos
+            range: 'Página1!A2', 
             valueInputOption: 'RAW',
             resource: { values },
         });
@@ -114,7 +114,7 @@ async function obterClientesPosVenda() {
         
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Clientes!A2:D', // MUDANÇA AQUI: Apontando para a aba do ERP
+            range: 'Clientes!A2:D', 
         });
 
         const linhas = response.data.values;
@@ -124,26 +124,40 @@ async function obterClientesPosVenda() {
         }
 
         let clientesParaDisparo = [];
-        const numerosPermitidos = ['5511984878461', '5511976378041']; // Seus números de teste
+        
+        // PUXA OS NÚMEROS DO .ENV E CRIA UM ARRAY
+        const numerosPermitidosString = process.env.NUMEROS_PERMITIDOS || '';
+        const numerosPermitidos = numerosPermitidosString
+            .split(',')
+            .map(num => num.trim())
+            .filter(num => num.length > 0); // Remove vazios
+
+        const travaAtiva = numerosPermitidos.length > 0;
 
         linhas.forEach(linha => {
-            const nome = linha[1];
+            const nome = linha[1] || 'Cliente';
             const celularBruto = linha[2];
-            const dataCadastro = linha[3];
+            const dataCadastro = linha[3] || 'recentemente';
 
             if (celularBruto) {
                 let numeroPronto = formatarNumero(celularBruto);
-                if (numerosPermitidos.includes(numeroPronto)) {
+                
+                // Se a trava estiver desativada OU o número estiver na whitelist
+                if (!travaAtiva || numerosPermitidos.includes(numeroPronto)) {
                     clientesParaDisparo.push({
                         nome: nome,
                         numeroJid: numeroPronto + '@s.whatsapp.net',
                         dataCadastro: dataCadastro
                     });
+                } else {
+                    console.log(`[Segurança] Bloqueado: ${nome} (${numeroPronto}) não está na whitelist.`);
                 }
             }
         });
 
-        console.log(`✅ [Sheets] ${clientesParaDisparo.length} clientes prontos para simulação.`);
+        const statusModo = MODO_SIMULACAO ? 'SIMULAÇÃO' : 'DISPARO REAL';
+        console.log(`✅ [Sheets] ${clientesParaDisparo.length} clientes carregados. MODO: ${statusModo}.`);
+        
         return clientesParaDisparo;
     } catch (error) {
         console.error("❌ Erro ao ler aba Clientes:", error.message);

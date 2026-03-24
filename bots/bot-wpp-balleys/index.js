@@ -16,6 +16,17 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const cron = require('node-cron');
+const { extrairDadosDoERP } = require('./Chat/RissatoMotors/erpSync');
+
+// Agenda para rodar todo dia às 18:00
+cron.schedule('0 18 * * *', () => {
+    console.log("⏰ Iniciando sincronização diária com o ERP da Rissato Motors...");
+    extrairDadosDoERP();
+}, {
+    timezone: "America/Sao_Paulo"
+});
+
 // Variável global para rastrear o status da conexão
 let botConectado = false;
 
@@ -55,6 +66,9 @@ app.post('/login', (req, res) => {
 });
 
 // --- ROTAS DO PAINEL ---
+// Importa o controlador da Rissato Motors
+const rissatoApi = require('./Chat/RissatoMotors/api');
+
 app.get('/', (req, res) => {
     if (!req.session.logged) return res.redirect('/login');
     res.render('index', { 
@@ -78,6 +92,20 @@ app.get('/api/relatorio/pdf', async (req, res) => {
         console.error("Erro ao gerar PDF via Web:", error);
         res.status(500).send("Erro ao gerar relatório.");
     }
+});
+
+// --- WEBHOOKS DE INTEGRAÇÃO (ERP) ---
+app.post('/api/webhook/rissatomotors', (req, res) => {
+    // 🛡️ Segurança: O ERP precisa enviar um Token Secreto no Header
+    const token = req.headers['authorization'];
+    // Verifica se o token bate com o do .env
+    if (token !== `Bearer ${process.env.RISSATO_API_TOKEN}`) {
+        console.log("⚠️ [Segurança] Tentativa de acesso bloqueada na API Rissato.");
+        return res.status(403).json({ error: "Acesso Negado. Token inválido." });
+    }
+
+    // Se a senha estiver correta, passa a bola para a pasta do cliente
+    rissatoApi.receberDadosERP(req, res);
 });
 
 // API para finalizar serviço manual via Dashboard

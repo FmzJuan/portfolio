@@ -7,12 +7,15 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      # CORREÇÃO 1: Ajustado para DB_PASS conforme o relatório do Manus
+      POSTGRES_PASSWORD: ${DB_PASS} 
       POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # CORREÇÃO 2: Injeta o script para criar a tabela "contatos" automaticamente na VPS
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   redis:
     image: redis:7-alpine
@@ -36,10 +39,12 @@ services:
       - db
       - redis
     volumes:
+      # Mantém a sessão do WhatsApp salva na VPS
       - ./auth_info_baileys:/app/auth_info_baileys
 
   watchtower:
-    image: containrrr/watchtower
+    # CORREÇÃO 3: O nome correto da imagem oficial é containrrr/watchtower
+    image: containrrr/watchtower 
     container_name: watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -47,4 +52,4 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:        # Adicionado volume do Redis para persistência
+  redis_data:

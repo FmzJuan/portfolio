@@ -14,28 +14,31 @@ const posVendaQueue = new Queue('pos-venda-rissato', { connection });
 /**
  * Agenda as mensagens de 1 dia e 6 meses
  */
+// Chat/RissatoMotors/scheduler.js (Apenas a função agendarMensagens)
+
 async function agendarMensagens(cliente) {
   const { telefone, nome, dataSaida } = cliente;
 
-  // 1. Agendamento de 24 horas (Pós-venda imediato)
-  // 24h * 60m * 60s * 1000ms
-const delay24h = 10 * 1000; // 10 SEGUNDOS (Perfeito para mostrar na hora)  
+  // Usa variáveis de ambiente para facilitar testes futuros. Se não existir, usa o tempo real.
+  // 1 dia = 24 * 60 * 60 * 1000 = 86400000 ms
+  const delay24h = process.env.DELAY_24H ? parseInt(process.env.DELAY_24H) : 86400000; 
+  
   await posVendaQueue.add(
     'feedback_24h',
     { telefone, nome, tipo: '24h' },
-    { delay: delay24h, jobId: `24h-${telefone}-${dataSaida}` } // jobId evita duplicatas
+    { delay: delay24h, jobId: `24h-${telefone}-${dataSaida}` } 
   );
 
-  // 2. Agendamento de 6 meses (Recorrência)
-  // 180 dias * 24h * 60m * 60s * 1000ms
-const delay6meses = 30 * 1000; // 30 SEGUNDOS (Para ela ver que o segundo agendamento também funciona)
+  // 6 meses = 180 dias * 24 * 60 * 60 * 1000 = 15552000000 ms
+  const delay6meses = process.env.DELAY_6MESES ? parseInt(process.env.DELAY_6MESES) : 15552000000;
+  
   await posVendaQueue.add(
     'revisao_6meses',
     { telefone, nome, tipo: '6meses' },
     { delay: delay6meses, jobId: `6meses-${telefone}-${dataSaida}` }
   );
 
-  console.log(`[Scheduler] Agendamentos criados para ${nome} (${telefone})`);
+  console.log(`[Scheduler] Pós-venda agendado para ${nome}: 24h e 6 meses.`);
 }
 
 module.exports = { agendarMensagens, posVendaQueue };
