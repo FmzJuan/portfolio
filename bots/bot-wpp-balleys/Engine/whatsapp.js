@@ -9,6 +9,8 @@ const pino = require("pino");
 const path = require("path");
 const { iniciarWorker } = require('../Chat/RissatoMotors/worker');
 
+let botStatus = 'desconectado';
+
 async function connectToWhatsApp(onMessage) {
     // 1. Importa o socket da Dashboard (index.js)
     const { io } = require('../index'); 
@@ -36,26 +38,24 @@ async function connectToWhatsApp(onMessage) {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            console.log("✅ QR CODE GERADO! Escaneie agora:");
+            botStatus = 'desconectado';
             qrcode.generate(qr, { small: true });
-            
-            // MANDA PARA A TELA (Dashboard)
             io.emit('qr', qr); 
+            io.emit('status', 'desconectado');
         }
 
         if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            console.log(`⚠️ Conexão fechada. Status: ${statusCode}`);
+            botStatus = 'desconectado';
             io.emit('status', 'desconectado');
-
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) {
-                console.log("🔄 Tentando reconectar em 5s...");
+            // ... (sua lógica de reconectar igual)
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            if (statusCode !== DisconnectReason.loggedOut) {
                 setTimeout(() => connectToWhatsApp(onMessage), 5000);
             }
         } else if (connection === 'open') {
-            console.log('✅ BOT ONLINE E CONECTADO COM SUCESSO!');
-            io.emit('status', 'conectado'); // AVISA A TELA QUE FICOU VERDE
+            botStatus = 'conectado'; // ATUALIZA STATUS
+            console.log('✅ BOT ONLINE!');
+            io.emit('status', 'conectado'); // AVISA O FRONT
         }
     });
 
@@ -64,24 +64,35 @@ async function connectToWhatsApp(onMessage) {
     // 5. Escuta as mensagens
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
+        if (!msg.message) return; // Removi o msg.key.fromMe daqui para você poder testar
 
         const from = msg.key.remoteJid;
         if (from.endsWith('@g.us')) return; 
 
-        // 🛡️ TRAVA: Admin vs Lead
-        const isAmanda = from.includes(process.env.ADMIN_NUMBER) || from === process.env.ADMIN_LID;
+        // Pega o texto da mensagem para verificar o comando
+        const texto = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "").toLowerCase();
 
-        if (isAmanda) {
-            console.log("✅ Admin identificado. Respondendo...");
-            onMessage(sock, msg);
+        // 🛡️ NOVA TRAVA DE AUTOTESTE:
+        // Se a mensagem for minha (fromMe) mas NÃO for o comando !disparar, eu ignoro para não dar loop.
+        if (msg.key.fromMe && texto !== '!disparar' && texto !== '/relatorio') return;
+
+        // Verifica se é o Admin (Você ou a Amanda)
+        // DICA: Certifique-se que o ADMIN_NUMBER no .env está APENAS os números (ex: 5511984...)
+        const isAdmin = from.includes(process.env.ADMIN_NUMBER) || msg.key.fromMe;
+
+        if (isAdmin) {
+            console.log("✅ Admin/Self identificado. Executando comando...");
+            await onMessage(sock, msg);
         } else {
             console.log(`👤 Lead (${from}) detectado. Apenas salvando...`);
-            onMessage(sock, msg, true); 
+            await onMessage(sock, msg, true); 
         }
     });
 
     return sock;
 }
-
-module.exports = { connectToWhatsApp };
+// Exportamos essa função para o index.js conseguir consultar o status a qualquer momento
+function getBotStatus() {
+    return botStatus;
+}
+module.exports = { connectToWhatsApp, getBotStatus };

@@ -1,124 +1,249 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Projeto Charlie - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeadsFlow - Dashboard Profissional</title>
     <link rel="stylesheet" href="/style.css"> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+    <style>
+        /* Layout Principal em Grid */
+        main {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 24px;
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            height: 420px; 
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover { transform: translateY(-5px); }
+
+        .card h3 {
+            margin: 0 0 20px 0;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #f4f4f5;
+        }
+
+        .card-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; 
+            overflow: hidden;
+        }
+
+        .log-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 12px;
+            height: 100%; 
+            overflow-y: auto;
+            font-size: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            display: flex;
+            gap: 10px;
+            line-height: 1.4;
+        }
+
+        .log-time { color: #6366f1; font-weight: bold; min-width: 65px; }
+        .log-msg { color: #e4e4e7; flex: 1; }
+        .log-success { color: #10b981; flex: 1; }
+
+        .actions-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .btn {
+            width: 100%;
+            margin: 0 !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-online { background: #10b98122; color: #10b981; border: 1px solid #10b98144; }
+        .status-offline { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
+
+        #connected-icon {
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
 </head>
-<body style="background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 0;">
+<body>
     
-    <header style="border-bottom: 2px solid #333; padding: 20px; background: #1a1a1a;">
-        <h1 style="letter-spacing: 2px;">PROJETO CHARLIE</h1>
-        <div id="status-badge" style="background: #e74c3c; display: inline-block; padding: 8px 20px; border-radius: 20px; font-weight: bold; transition: 0.5s;">OFFLINE</div>
+    <header style="display: flex; justify-content: space-between; align-items: center; padding: 20px 40px;">
+        <h1 class="brand-title" style="margin: 0;">Leads<span>Flow</span></h1>
+        <div id="status-badge" class="status-badge status-offline">Verificando...</div>
     </header>
 
-    <main style="margin-top: 50px; padding: 20px;">
-        
-        <div id="qrcode-container" style="background: white; padding: 30px; display: inline-block; border-radius: 15px; box-shadow: 0 0 20px rgba(0,0,0,0.5);">
-            <p style="color: #333; font-weight: bold; margin-bottom: 20px;">ESCANEIE PARA CONECTAR</p>
-            <canvas id="canvas-qr" style="max-width: 250px;"></canvas>
-            <p id="qr-msg" style="color: #666; font-size: 12px; margin-top: 10px;">Aguardando o servidor gerar o código...</p>
+    <main>
+        <div class="card">
+            <h3><i class="fab fa-whatsapp" style="color: #25d366;"></i> Conexão</h3>
+            <div class="card-content">
+                <div id="qrcode-container" style="text-align: center;">
+                    <canvas id="canvas-qr" style="max-width: 180px; margin: 0 auto;"></canvas>
+                    <div id="connected-icon" style="display: none;">
+                        <i class="fas fa-check-circle" style="font-size: 70px; color: #10b981;"></i>
+                        <p style="color: #10b981; font-weight: bold; margin-top: 15px; font-size: 1.2rem;">Bot Conectado</p>
+                    </div>
+                </div>
+            </div>
+            <p id="qr-msg" style="text-align: center; font-size: 11px; color: #94a3b8; margin-top: 15px;">
+                Status em tempo real
+            </p>
         </div>
 
-        <div style="margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 15px;">
-            <a href="<%= sheetLink %>" target="_blank" 
-               style="background: #27ae60; color: white; padding: 18px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; width: 300px; border: 2px solid transparent; transition: 0.3s;"
-               onmouseover="this.style.background='#2ecc71'" onmouseout="this.style.background='#27ae60'">
-               📊 ACESSAR PLANILHA CRM
-            </a>
-            
-            <button onclick="window.location.href='/gerar-pdf-manual'" 
-                    style="background: transparent; color: #2980b9; padding: 15px 40px; border: 2px solid #2980b9; border-radius: 8px; cursor: pointer; font-weight: bold; width: 300px; transition: 0.3s;"
-                    onmouseover="this.style.background='#2980b9'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#2980b9'">
-                📄 BAIXAR RELATÓRIO PDF
-            </button>
-        </div>
-
-        <div style="margin-top: 40px; background: #1a1a1a; padding: 30px; border-radius: 15px; border: 2px solid #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.2); width: 80%; max-width: 600px; display: inline-block; text-align: center;">
-            <h3 style="color: #2ecc71; margin-bottom: 10px;">🚘 Finalizar Serviço</h3>
-            <p style="color: #aaa; font-size: 14px; margin-bottom: 25px;">O sistema agendará o pós-venda (24h) e o retorno (6 meses) automaticamente.</p>
-            
-            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
-                <input type="text" id="nomeCliente" placeholder="Nome do Cliente" 
-                       style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
-                
-                <input type="text" id="telCliente" placeholder="Telefone (Ex: 5511999999999)" 
-                       style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: white;">
-                
-                <button onclick="dispararPosVenda()" 
-                        style="width: 100%; background: #27ae60; color: white; padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s;"
-                        onmouseover="this.style.background='#2ecc71'" onmouseout="this.style.background='#27ae60'">
-                    AGENDAR NO SISTEMA
-                </button>
+        <div class="card">
+    <h3><i class="fas fa-terminal" style="color: #6366f1;"></i> Atividade</h3>
+    <div class="card-content">
+        <div id="activity-log" class="log-container">
+            <div id="log-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; opacity: 0.3;">
+                <i class="fas fa-microchip" style="font-size: 40px; margin-bottom: 15px;"></i>
+                <p style="font-weight: bold; letter-spacing: 2px;">MONITOR DE LOGS</p>
+                <p style="font-size: 10px;">AGUARDANDO ATIVIDADE DO SISTEMA...</p>
             </div>
         </div>
-        </main>
+    </div>
+</div>
+
+        <div class="card">
+            <h3><i class="fas fa-rocket" style="color: #f59e0b;"></i> Ações</h3>
+            <div class="card-content" style="justify-content: flex-start;">
+                <div class="actions-wrapper">
+                    <a href="<%= sheetLink %>" target="_blank" class="btn btn-primary">
+                        <i class="fas fa-table"></i> Planilha CRM
+                    </a>
+                    
+                    <button onclick="window.location.href='/api/relatorio/pdf'" class="btn btn-secondary">
+                        <i class="fas fa-file-pdf"></i> Baixar Relatório PDF
+                    </button>
+                </div>
+                
+                <div style="margin-top: auto;">
+                    <div style="background: rgba(99, 102, 241, 0.1); padding: 15px; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                        <p style="font-size: 11px; color: #a5b4fc; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;">Unidade Ativa:</p>
+                        <p style="font-weight: bold; color: #fff; font-size: 1.1rem;"><%= nomeEmpresa %></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <script>
         const socket = io();
         const badge = document.getElementById('status-badge');
-        const qrContainer = document.getElementById('qrcode-container');
         const canvas = document.getElementById('canvas-qr');
+        const connectedIcon = document.getElementById('connected-icon');
+        const logContainer = document.getElementById('activity-log');
+        const qrMsg = document.getElementById('qr-msg');
 
-        // Escuta o QR Code vindo do WhatsApp.js (Servidor)
-        socket.on('qr', (qrText) => {
-            console.log("Recebendo novo QR Code...");
-            document.getElementById('qr-msg').innerText = "Código atualizado!";
+        function addLog(message, type = 'default') {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('pt-BR');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
             
-            // Transforma o texto do Baileys em imagem no Canvas
-            QRCode.toCanvas(canvas, qrText, { width: 250 }, function (error) {
-                if (error) console.error(error);
-                console.log('QR Code renderizado com sucesso!');
-            });
-        });
-
-        // Escuta a mudança de status
-        socket.on('status', (status) => {
-            if(status === 'conectado') {
-                badge.style.backgroundColor = '#2ecc71';
-                badge.innerText = 'ONLINE';
-                qrContainer.style.display = 'none'; // Esconde o QR se já conectou
-            } else {
-                badge.style.backgroundColor = '#e74c3c';
-                badge.innerText = 'OFFLINE';
-                qrContainer.style.display = 'inline-block';
-            }
-        });
-
-        // A função que o botão chama
-        async function dispararPosVenda() {
-            const nome = document.getElementById('nomeCliente').value;
-            const telefone = document.getElementById('telCliente').value;
-
-            if (!nome || !telefone) {
-                alert("Por favor, preencha o nome e o telefone!");
-                return;
-            }
-
-            // Avisa o "garçom" (a sua API no Node.js)
-            try {
-                const resposta = await fetch('/api/finalizar-servico', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ nome: nome, telefone: telefone })
-                });
-
-                const dados = await resposta.json();
-
-                if (dados.success) {
-                    alert("✅ Sucesso! Mensagens de acompanhamento agendadas no Redis.");
-                    // Limpa os campos
-                    document.getElementById('nomeCliente').value = '';
-                    document.getElementById('telCliente').value = '';
-                } else {
-                    alert("❌ Erro ao agendar: " + dados.error);
-                }
-            } catch (erro) {
-                alert("Erro de comunicação com o servidor.");
-            }
+            let msgClass = type === 'success' ? 'log-success' : 'log-msg';
+            
+            entry.innerHTML = `
+                <span class="log-time">${timeStr}</span>
+                <span class="${msgClass}">${message}</span>
+            `;
+            
+            logContainer.prepend(entry);
+            // Limita a quantidade de logs na tela para não pesar
+            if (logContainer.children.length > 50) logContainer.lastChild.remove();
         }
+        socket.on('connect', () => {
+        console.log("Conectado ao servidor de logs.");
+    });
+        // Evento de QR Code
+        socket.on('qr', (qrText) => {
+            connectedIcon.style.display = 'none';
+            canvas.style.display = 'block';
+            qrMsg.innerText = "Escaneie para conectar o WhatsApp";
+            
+            QRCode.toCanvas(canvas, qrText, { width: 180, margin: 1 }, function (error) {
+                if (error) console.error(error);
+            });
+            
+            badge.className = 'status-badge status-offline';
+            badge.innerText = 'OFFLINE: AGUARDANDO LOGIN';
+            addLog("Novo QR Code gerado. Aguardando leitura...");
+        });
+
+        // Evento de Status de Conexão
+       socket.on('status', (status) => {
+        const qrCanvas = document.getElementById('canvas-qr');
+        const connectedIcon = document.getElementById('connected-icon');
+        const qrMsg = document.getElementById('qr-msg');
+
+        if(status === 'conectado') {
+            badge.className = 'status-badge status-online';
+            badge.innerText = 'CONECTADO';
+            
+            if(qrCanvas) qrCanvas.style.display = 'none';
+            if(connectedIcon) connectedIcon.style.display = 'block';
+            qrMsg.innerText = "WhatsApp pronto para uso.";
+        } else {
+            badge.className = 'status-badge status-offline';
+            badge.innerText = 'DESCONECTADO';
+            
+            if(qrCanvas) qrCanvas.style.display = 'block';
+            if(connectedIcon) connectedIcon.style.display = 'none';
+        }
+    });
+
+        // Logs de atividade do bot
+        socket.on('new-log', (data) => {
+            addLog(data.msg, data.type || 'default');
+        });
     </script>
 </body>
 </html>
