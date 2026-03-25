@@ -47,6 +47,33 @@ app.use(session({
     resave: false, 
     saveUninitialized: true 
 }));
+app.use(async (req, res, next) => {
+    const host = req.headers.host;
+    const subdominio = host.split('.')[0]; 
+
+    // Ignora localhost puro ou www para não dar erro
+    if (subdominio && subdominio !== 'localhost' && subdominio !== 'www') {
+        try {
+            // Use a função 'query' que você importou no topo
+            const result = await query(
+                'SELECT * FROM clientes_config WHERE subdominio = $1', 
+                [subdominio]
+            );
+
+            if (result.rows.length > 0) {
+                req.cliente = result.rows[0]; 
+                // Torna os dados do cliente disponíveis em todas as telas (EJS)
+                res.locals.cliente = req.cliente; 
+                console.log(`✅ Acesso identificado: ${req.cliente.nome_oficina}`);
+            } else {
+                return res.status(404).send('Oficina não encontrada no sistema.');
+            }
+        } catch (err) {
+            console.error('Erro ao buscar cliente:', err);
+        }
+    }
+    next();
+});
 
 // --- LÓGICA DE SINCRONIZAÇÃO INSTANTÂNEA ---
 io.on('connection', (socket) => {
@@ -60,13 +87,26 @@ io.on('connection', (socket) => {
 // --- ROTAS DE AUTENTICAÇÃO ---
 app.get('/login', (req, res) => res.render('login'));
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
-    if (username === process.env.PANEL_USER && password === process.env.PANEL_PASS) { 
+    
+    // Se identificamos um cliente pelo subdomínio no middleware
+    if (req.cliente) {
+        // Verifica se o e-mail e a senha batem com o que está no banco
+        if (username === req.cliente.email_contato && password === req.cliente.senha_dashboard) {
+            req.session.logged = true;
+            req.session.clienteId = req.cliente.id; // Salva o ID do cliente na sessão
+            return res.redirect('/');
+        }
+    }
+
+    // Fallback para o seu usuário mestre do .env (útil para você dar manutenção)
+    if (username === process.env.PANEL_USER && password === process.env.PANEL_PASS) {
         req.session.logged = true;
         return res.redirect('/');
     }
-    res.redirect('/login');
+
+    res.send('<script>alert("Usuário ou senha inválidos para este subdomínio!"); window.location="/login";</script>');
 });
 
 // --- ROTAS DO PAINEL ---

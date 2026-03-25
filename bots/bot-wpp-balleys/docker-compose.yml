@@ -50,6 +50,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 300 bot_charlie_app
 
+
 volumes:
   postgres_data:
   redis_data:

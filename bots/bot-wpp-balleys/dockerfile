@@ -1,15 +1,12 @@
-# Estágio 1: Build (Instala as dependências de forma isolada)
-FROM node:20-slim AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
+# ... (Estágio 1 continua igual)
 
-# Estágio 2: Execução (Imagem final, leve e segura)
+# Estágio 2: Execução
 FROM node:20-slim
 WORKDIR /app
 
-# Instala ferramentas necessárias para o Puppeteer/Baileys caso precise futuramente
+# Instala o Chromium e as dependências para o Puppeteer e Baileys
 RUN apt-get update && apt-get install -y \
+    chromium \
     ffmpeg \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -23,13 +20,13 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Copia apenas os módulos prontos do Estágio 1
+# Váriavel de ambiente para o Puppeteer saber onde está o Chrome no Linux
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 COPY --from=builder /app/node_modules ./node_modules
-# Copia o restante do seu código
 COPY . .
 
-# Expõe a porta da sua Dashboard
 EXPOSE 3000
 
-# Comando que inicia o sistema
 CMD ["node", "index.js"]
