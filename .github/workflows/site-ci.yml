@@ -51,19 +51,13 @@ jobs:
           npm install --legacy-peer-deps
           npm run build
 
-  Quase isso! Você teve um pequeno erro de identação (espaçamento) e de lógica no comando de teste. As variáveis de ambiente (env) precisam estar no passo do Jest, pois é nele que o código tenta conectar ao banco/redis para testar. Além disso, o comando node --check deve estar em seu próprio passo ou logo após o npm test.
-
-Aqui está o trecho do job-bot corrigido para você copiar e substituir. Note que usei serviços auxiliares (services) para que o GitHub realmente suba um banco e um redis temporários para o seu teste passar de verdade:
-
-YAML
   # --- VERIFICAÇÃO DO BOT (BAILEYS) ---
   job-bot:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write 
+      packages: write
 
-    # Adicionamos serviços reais para o teste não dar erro de conexão
     services:
       postgres:
         image: postgres:15
@@ -79,7 +73,7 @@ YAML
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -93,7 +87,6 @@ YAML
 
       - name: Run Automated Tests (Jest)
         env:
-          # Estas variáveis permitem que o Jest conecte nos services acima
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leadsflow
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
@@ -107,7 +100,6 @@ YAML
           node --check index.js
           node --check Engine/whatsapp.js
 
-      # ----- GHCR (Só acontece se os testes acima passarem) ------
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
