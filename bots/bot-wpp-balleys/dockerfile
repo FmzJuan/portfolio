@@ -1,9 +1,12 @@
-# ... (Estágio 1 continua igual)
+# ESTÁGIO 1: Nomeie como "builder"
+FROM node:20-slim AS builder  
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
 
-# Estágio 2: Execução
+# ESTÁGIO 2: 
 FROM node:20-slim
 WORKDIR /app
-
 # Instala o Chromium e as dependências para o Puppeteer e Baileys
 RUN apt-get update && apt-get install -y \
     chromium \
