@@ -51,12 +51,32 @@ jobs:
           npm install --legacy-peer-deps
           npm run build
 
+  Quase isso! Você teve um pequeno erro de identação (espaçamento) e de lógica no comando de teste. As variáveis de ambiente (env) precisam estar no passo do Jest, pois é nele que o código tenta conectar ao banco/redis para testar. Além disso, o comando node --check deve estar em seu próprio passo ou logo após o npm test.
+
+Aqui está o trecho do job-bot corrigido para você copiar e substituir. Note que usei serviços auxiliares (services) para que o GitHub realmente suba um banco e um redis temporários para o seu teste passar de verdade:
+
+YAML
   # --- VERIFICAÇÃO DO BOT (BAILEYS) ---
   job-bot:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write 
+
+    # Adicionamos serviços reais para o teste não dar erro de conexão
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: leadsflow
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+
     steps:
       - uses: actions/checkout@v4
       
@@ -71,8 +91,12 @@ jobs:
           cd bots/bot-wpp-balleys
           npm install --legacy-peer-deps
 
-      # --- ADICIONE ESTE PASSO AQUI ---
       - name: Run Automated Tests (Jest)
+        env:
+          # Estas variáveis permitem que o Jest conecte nos services acima
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leadsflow
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
         run: |
           cd bots/bot-wpp-balleys
           npm test
@@ -81,9 +105,9 @@ jobs:
         run: |
           cd bots/bot-wpp-balleys
           node --check index.js
-          # Adicione outros arquivos se necessário
-          
-      # ----- GHCR ------
+          node --check Engine/whatsapp.js
+
+      # ----- GHCR (Só acontece se os testes acima passarem) ------
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -91,11 +115,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Este passo FAZ O BUILD e FAZ O PUSH para a nuvem de uma vez só
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: ./bots/bot-wpp-balleys
           push: true
-          # CORREÇÃO: Removida a variável, inserido 'fmzjuan' todo em minúsculo
           tags: ghcr.io/fmzjuan/charlie-bot:latest

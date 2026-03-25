@@ -1,4 +1,4 @@
-const { formatarNumeroBaileys, formatarLeadParaSheets } = require('./formatador');
+const { formatarNumeroBaileys, formatarLeadParaSheets } = require('../utils/formatador');
 
 describe('Testes de Formatação LeadsFlow', () => {
     
