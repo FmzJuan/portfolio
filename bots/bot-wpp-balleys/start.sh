@@ -20,7 +20,7 @@ then
 fi
 
 echo "[2/3] Baixando atualizações e ligando o servidor..."
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml up -d
 
 echo ""
 echo "[3/3] Tudo pronto!"
