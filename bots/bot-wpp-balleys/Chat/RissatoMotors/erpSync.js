@@ -19,7 +19,8 @@ async function extrairDadosDoERP() {
     console.log("🤖 [RPA] Iniciando extração de dados...");
 
     const browser = await puppeteer.launch({
-        headless: false, 
+        // Em produção, use o modo headless "new" para melhor performance e compatibilidade
+        headless: process.env.NODE_ENV === 'production' ? "new" : false, 
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
         defaultViewport: null
     });

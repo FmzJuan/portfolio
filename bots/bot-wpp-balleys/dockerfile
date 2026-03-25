@@ -9,7 +9,19 @@ FROM node:20-slim
 WORKDIR /app
 
 # Instala ferramentas necessárias para o Puppeteer/Baileys caso precise futuramente
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libxcomposite1 \
+    libxrandr2 \
+    libxdamage1 \
+    libgbm1 \
+    libasound2 \
+    libpangocairo-1.0-0 \
+    libcups2 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copia apenas os módulos prontos do Estágio 1
 COPY --from=builder /app/node_modules ./node_modules
