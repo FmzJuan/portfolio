@@ -52,10 +52,8 @@ jobs:
           npm run build
 
   # --- VERIFICAÇÃO DO BOT (BAILEYS) ---
-
   job-bot:
     runs-on: ubuntu-latest
-    #  MUITO IMPORTANTE: Dá permissão para a Action salvar no GHCR
     permissions:
       contents: read
       packages: write 
@@ -73,12 +71,17 @@ jobs:
           cd bots/bot-wpp-balleys
           npm install --legacy-peer-deps
 
-      - name: Check Code Syntax (Verifica erros de digitação e chaves abertas)
+      # --- ADICIONE ESTE PASSO AQUI ---
+      - name: Run Automated Tests (Jest)
+        run: |
+          cd bots/bot-wpp-balleys
+          npm test
+
+      - name: Check Code Syntax
         run: |
           cd bots/bot-wpp-balleys
           node --check index.js
-          node --check Engine/whatsapp.js
-          node --check Engine/sheets.js
+          # Adicione outros arquivos se necessário
           
       # ----- GHCR ------
       - name: Log in to GitHub Container Registry
