@@ -164,5 +164,61 @@ async function obterClientesPosVenda() {
         return [];
     }
 }
+/**
+ * Salva o CSV inteiro e bruto na aba "Dados_ERP"
+ */
+async function salvarDadosBrutosERP(cabecalho, linhas) {
+    try {
+        const spreadsheetId = process.env.SHEET_ID;
+        
+        // 1. Limpa os dados velhos da aba Dados_ERP
+        await sheets.spreadsheets.values.clear({ 
+            spreadsheetId, 
+            range: 'Dados_ERP!A:ZZ' 
+        });
 
-module.exports = { salvarNoSheets, obterClientesPosVenda, processarCampanhaPosVenda };
+        // 2. Monta a tabela (Cabeçalho na primeira linha, dados nas outras)
+        const values = [cabecalho, ...linhas];
+
+        // 3. Cola os dados novos
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'Dados_ERP!A1',
+            valueInputOption: 'USER_ENTERED',
+            resource: { values },
+        });
+
+        console.log(`✅ [Sheets] Dados brutos (${linhas.length} linhas) atualizados na aba Dados_ERP.`);
+    } catch (error) {
+        console.error("❌ Erro ao salvar dados brutos no Sheets:", error.message);
+    }
+}
+
+/**
+ * Envia os dados filtrados para a aba "Clientes"
+ */
+async function atualizarAbaClientes(dadosLimpos) {
+    try {
+        const spreadsheetId = process.env.SHEET_ID;
+        
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'Clientes!A2', 
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: dadosLimpos },
+        });
+
+        console.log(`✅ [Sheets] ${dadosLimpos.length} clientes limpos adicionados à aba Clientes.`);
+    } catch (error) {
+        console.error("❌ Erro ao salvar clientes no Sheets:", error.message);
+    }
+}
+
+
+module.exports = { 
+    salvarNoSheets, 
+    obterClientesPosVenda, 
+    processarCampanhaPosVenda,
+    salvarDadosBrutosERP, // <-- Adicionado
+    atualizarAbaClientes  // <-- Adicionado
+};

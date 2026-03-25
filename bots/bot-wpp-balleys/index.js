@@ -18,6 +18,10 @@ const io = new Server(server);
 
 const cron = require('node-cron');
 const { extrairDadosDoERP } = require('./Chat/RissatoMotors/erpSync');
+const { 
+    salvarNoSheets, 
+    processarCampanhaPosVenda 
+} = require('./Functions/googleSheets');
 
 // Agenda para rodar todo dia às 18:00
 cron.schedule('0 18 * * *', () => {
@@ -74,7 +78,7 @@ app.get('/', (req, res) => {
     res.render('index', { 
         sheetLink: `https://docs.google.com/spreadsheets/d/${process.env.SHEET_ID}`,
         nomeCliente: process.env.CLIENTE_NOME || 'LeadsFlow',
-        nomeEmpresa: process.env.NOME_EMPRESA || "Empresa Padrão"
+        nomeEmpresa: process.env.NOME_EMPRESA || "Empresa default"
     });
 });
 
