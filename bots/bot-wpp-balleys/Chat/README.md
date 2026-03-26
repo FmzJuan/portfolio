@@ -1,6 +1,6 @@
 # 💬 Chat
 
-A pasta `Chat` contém os módulos de lógica de conversa segmentados por cliente. Cada subpasta representa um cliente/oficina integrado ao sistema, isolando completamente o fluxo de mensagens, agendamentos e integrações de cada um.
+A pasta `Chat` contém os módulos de lógica de conversa e automação específicos de cada cliente do sistema. Cada subpasta representa um cliente/projeto independente, com seu próprio fluxo, mensagens e integrações.
 
 ---
 
@@ -9,158 +9,132 @@ A pasta `Chat` contém os módulos de lógica de conversa segmentados por client
 ```
 Chat/
 └── RissatoMotors/
-    ├── api.js         → Endpoint webhook para receber dados do ERP
-    ├── erpSync.js     → RPA: extrai dados do ERP via Puppeteer
-    ├── fluxo.js       → Lógica de resposta às mensagens dos clientes
-    ├── mensagens.js   → Banco de frases para os disparos automáticos
-    ├── scheduler.js   → Agendador de mensagens via BullMQ + Redis
-    └── worker.js      → Consumidor da fila: envia as mensagens agendadas
+    ├── api.js        → Endpoint que recebe dados do ERP via webhook
+    ├── erpSync.js    → RPA com Puppeteer para extrair clientes do ERP
+    ├── fluxo.js      → Lógica de resposta automática ao cliente
+    ├── mensagens.js  → Templates de mensagens de pós-venda
+    ├── scheduler.js  → Agendador de mensagens via fila Redis/BullMQ
+    └── worker.js     → Consumidor da fila que dispara os envios
 ```
 
 ---
 
-## 📄 `RissatoMotors/api.js`
+## 📁 RissatoMotors
 
-Controlador HTTP que recebe dados do ERP da Rissato Motors via **webhook**.
+Módulo completo de automação de pós-venda para a **Rissato Motors**, uma oficina mecânica. O fluxo: o ERP notifica o sistema quando um serviço é finalizado → o sistema agenda mensagens automáticas de acompanhamento para 24 horas e 6 meses depois → o worker processa os envios no momento certo, de forma humanizada.
 
-### Funções
+---
+
+### 📄 `api.js` — Endpoint de Webhook do ERP
+
+Controlador HTTP que recebe os dados do cliente diretamente do ERP quando um serviço é finalizado.
 
 #### `receberDadosERP(req, res)`
-Processa requisições `POST` enviadas pelo ERP quando um serviço é finalizado.
-
-- Extrai do `body` os campos `nome`, `telefone`, `veiculo` e `data_saida`.
-- Valida se `nome` e `telefone` estão presentes; retorna `400` se faltar algum.
+- Extrai `nome`, `telefone`, `veiculo` e `data_saida` do body da requisição.
+- Valida se os campos obrigatórios (`nome` e `telefone`) foram enviados. Se não, retorna erro `400`.
 - Chama `agendarMensagens()` do `scheduler.js` para inserir o cliente na fila de pós-venda.
-- Retorna `200` com sucesso ao ERP, ou `500` em caso de erro interno.
+- Responde com `200` e confirmação de sucesso para o ERP.
+- Em caso de erro interno, responde com `500`.
 
 ---
 
-## 📄 `RissatoMotors/erpSync.js`
+### 📄 `erpSync.js` — RPA de Extração do ERP
 
-Robot de automação (RPA) que usa **Puppeteer** para fazer login no ERP da oficina, exportar a lista de clientes em CSV e sincronizar os dados com o Google Sheets.
-
-### Funções
+Robô de automação que usa **Puppeteer** para fazer login no sistema ERP da oficina e baixar a lista de clientes automaticamente, sem necessidade de API oficial.
 
 #### `extrairDadosDoERP()`
-Orquestra todo o fluxo de extração automatizada:
+Inicia o navegador headless e executa o fluxo completo de extração:
 
-1. Abre um navegador Chromium (headless em produção, visível em desenvolvimento).
-2. Configura a pasta `downloads/` para receber o arquivo CSV.
-3. Acessa `https://sistema.oficinaintegrada.com.br/login.asp` e preenche os campos de credenciais do `.env`.
-4. Clica em `#btnLogar` e aguarda o redirecionamento.
-5. Detecta e fecha automaticamente o tutorial do sistema (se presente).
-6. Navega até o menu **Clientes → Listar Clientes**.
-7. Clica no botão de exportação e aguarda 15 segundos para o download concluir.
-8. Chama `processarCSVBaixado()` ao final.
-9. Fecha o navegador no bloco `finally`.
+1. Abre o browser (headless em produção, visível em desenvolvimento).
+2. Configura a pasta de download local (`downloads/`).
+3. Acessa a URL de login do ERP e preenche `chave`, `usuário` e `senha` via variáveis de ambiente.
+4. Clica em "Logar" e aguarda a navegação.
+5. Detecta e fecha o tutorial de boas-vindas se aparecer.
+6. Navega até o menu "Clientes" → "Listar Clientes".
+7. Clica no botão de exportar CSV e aguarda 15 segundos para o download concluir.
+8. Chama `processarCSVBaixado()` para processar o arquivo.
+9. Fecha o browser ao final, mesmo em caso de erro.
 
 #### `processarCSVBaixado()`
-Lê e processa o arquivo CSV mais recente da pasta `downloads/`:
+Lê e processa o CSV baixado pelo RPA:
 
-1. Lista os arquivos `.csv` ou `.xls` na pasta e pega o mais recente.
-2. Lê o arquivo usando `csv-parser` com separador `;`.
-3. Para cada linha: salva os dados brutos em um array e usa `formatarLeadParaSheets()` para gerar o formato limpo.
-4. Ao terminar a leitura, chama `salvarDadosBrutosERP()` para gravar tudo na aba `Dados_ERP` da planilha.
-5. Chama `atualizarAbaClientes()` para adicionar os clientes formatados na aba `Clientes`.
-6. Deleta o arquivo CSV após o processamento.
+1. Busca o arquivo mais recente na pasta `downloads/`.
+2. Faz o streaming da leitura do CSV com separador `;`.
+3. Para cada linha: salva os dados brutos para a aba `Dados_ERP` e formata os dados para a aba `Clientes` via `formatarLeadParaSheets()`.
+4. Ao finalizar, chama `salvarDadosBrutosERP()` e `atualizarAbaClientes()` no Google Sheets.
+5. Deleta o arquivo CSV após o processamento.
+
+Se executado diretamente (`node erpSync.js`), chama `extrairDadosDoERP()` imediatamente.
 
 ---
 
-## 📄 `RissatoMotors/fluxo.js`
+### 📄 `fluxo.js` — Fluxo de Resposta ao Cliente
 
-Gerencia as **respostas automáticas** do bot quando clientes respondem às mensagens de pós-venda.
-
-### Funções
+Gerencia as respostas automáticas do bot quando o cliente responde às mensagens de pós-venda.
 
 #### `executar(sock, msg)`
-Avalia o texto recebido e executa a ação correspondente:
-
-- Se o cliente digitar `1` (satisfeito): envia uma mensagem de agradecimento e registra `"Feedback Positivo"` no Google Sheets com data/hora.
-- Se o cliente digitar `2` (insatisfeito): envia uma mensagem de suporte e registra `"ALERTA: Problema relatado"` no Sheets, sinalizando para a equipe humana.
-- Qualquer outra mensagem é ignorada silenciosamente.
+- Extrai o texto da mensagem e o número do cliente.
+- Se o cliente responder `"1"` (satisfeito): envia mensagem de agradecimento e registra "Feedback Positivo" no Google Sheets.
+- Se o cliente responder `"2"` (insatisfeito): envia mensagem de desculpas, informa que a equipe entrará em contato, e registra `"ALERTA: Problema relatado"` no Sheets.
 
 ---
 
-## 📄 `RissatoMotors/mensagens.js`
+### 📄 `mensagens.js` — Templates de Mensagens
 
-Arquivo de **configuração de conteúdo** — centraliza todas as frases usadas nos disparos automáticos.
+Arquivo de configuração com os textos das mensagens automáticas. Exporta dois arrays:
 
-Não contém funções. Exporta dois arrays:
+- **`mensagens24h`**: 3 variações de mensagens enviadas 24 horas após a saída do veículo, com a tag `{nome}` para personalização.
+- **`mensagens6meses`**: 3 variações de mensagens enviadas 6 meses depois, sugerindo revisão preventiva. Também com `{nome}`.
 
-- `mensagens24h` — 3 variações de mensagem para o follow-up de 24 horas após o serviço. Usam a tag `{nome}` como placeholder.
-- `mensagens6meses` — 3 variações de mensagem para o lembrete de revisão após 6 meses. Também usam `{nome}`.
-
-O `worker.js` sorteia aleatoriamente uma frase de cada array a cada disparo.
+O `worker.js` sorteia aleatoriamente uma mensagem de cada array para evitar repetições.
 
 ---
 
-## 📄 `RissatoMotors/scheduler.js`
+### 📄 `scheduler.js` — Agendador de Filas
 
-Responsável por **agendar os jobs** de pós-venda na fila do Redis usando **BullMQ**.
+Cria e gerencia filas de jobs com **BullMQ + Redis** para envio temporizado de mensagens.
 
-### Configuração
-Cria uma conexão com o Redis via `ioredis` usando `REDIS_HOST` e `REDIS_PORT` do `.env`. Cria a fila `pos-venda-rissato`.
-
-### Funções
+Cria a fila `pos-venda-rissato` conectada ao Redis (host e porta configuráveis via `.env`).
 
 #### `agendarMensagens(cliente)`
-Insere dois jobs na fila para cada cliente processado:
+Insere dois jobs na fila para um cliente:
 
-- **Job `feedback_24h`**: agendado com delay de 24 horas (86.400.000 ms). Pode ser sobrescrito pela variável `DELAY_24H` no `.env` para facilitar testes.
-- **Job `revisao_6meses`**: agendado com delay de 180 dias (15.552.000.000 ms). Pode ser sobrescrito por `DELAY_6MESES`.
-- Ambos usam `jobId` único no formato `tipo-telefone-dataSaida` para evitar duplicatas.
+- **Job `feedback_24h`**: agendado com delay de 24 horas (ou `DELAY_24H` do `.env` para testes). O `jobId` é único por telefone + data de saída para evitar duplicatas.
+- **Job `revisao_6meses`**: agendado com delay de 180 dias (ou `DELAY_6MESES` do `.env`).
 
-Exporta também a instância `posVendaQueue` para que outros módulos possam interagir com a fila.
+Ambos carregam os dados `{ telefone, nome, tipo }` para o worker processar no momento correto.
 
 ---
 
-## 📄 `RissatoMotors/worker.js`
+### 📄 `worker.js` — Consumidor da Fila
 
-Consumidor da fila BullMQ — **executa os jobs** de envio quando o tempo de delay expira.
-
-### Funções
+Processa os jobs da fila `pos-venda-rissato` e realiza os envios de forma humanizada para evitar banimento.
 
 #### `enviarMensagemHumana(sock, jid, texto)`
-Envia mensagens de forma humanizada para evitar banimento pelo WhatsApp:
+Envia uma mensagem simulando comportamento humano:
 
-1. Emite o evento `composing` ("digitando...") para o contato via `sock.sendPresenceUpdate`.
-2. Aguarda um tempo **aleatório entre 10 e 20 segundos** simulando digitação real.
-3. Envia a mensagem de texto via `sock.sendMessage`.
-4. Emite `paused` para parar o indicador de digitação.
+1. Ativa o indicador `"digitando..."` no WhatsApp via `sendPresenceUpdate('composing')`.
+2. Aguarda um tempo **aleatório entre 10 e 20 segundos**.
+3. Envia a mensagem de texto.
+4. Para o indicador de digitação com `sendPresenceUpdate('paused')`.
 
 #### `iniciarWorker(sock)`
-Inicializa o worker que escuta a fila `pos-venda-rissato`:
+Inicia o worker que fica escutando a fila continuamente:
 
-1. Para cada job consumido, extrai `telefone`, `nome` e `tipo` (`24h` ou `6meses`).
-2. Formata o JID do WhatsApp: `telefone@s.whatsapp.net`.
-3. Seleciona o array de mensagens correto (`mensagens24h` ou `mensagens6meses`).
-4. Sorteia aleatoriamente uma frase do array.
-5. Substitui `{nome}` pelo primeiro nome real do cliente.
-6. Chama `enviarMensagemHumana()` para disparar com comportamento natural.
-7. Loga `completed` ou `failed` para cada job processado.
-
----
-
-## 🔗 Dependências
-
-| Módulo | Arquivo | Finalidade |
-|---|---|---|
-| `bullmq` | `scheduler.js`, `worker.js` | Fila de jobs com Redis |
-| `ioredis` | `scheduler.js`, `worker.js` | Conexão com Redis |
-| `puppeteer` | `erpSync.js` | Automação de navegador (RPA) |
-| `csv-parser` | `erpSync.js` | Leitura de arquivos CSV |
+1. Recebe o socket ativo do Baileys como parâmetro.
+2. Para cada job: identifica o tipo (`24h` ou `6meses`), sorteia uma mensagem aleatória do array correspondente, substitui `{nome}` pelo primeiro nome do cliente e chama `enviarMensagemHumana()`.
+3. Registra `completed` ou `failed` no console para monitoramento.
 
 ---
 
 ## 🔐 Variáveis de Ambiente necessárias
 
 ```env
-ERP_CHAVE=         # Chave de acesso do ERP
-ERP_USER=          # Usuário do ERP
-ERP_PASS=          # Senha do ERP
-REDIS_HOST=        # Host do Redis (padrão: localhost)
-REDIS_PORT=        # Porta do Redis (padrão: 6379)
-DELAY_24H=         # (Opcional) Delay em ms para testes do job de 24h
-DELAY_6MESES=      # (Opcional) Delay em ms para testes do job de 6 meses
-RISSATO_API_TOKEN= # Token de segurança para o webhook do ERP
+ERP_CHAVE=       # Chave de acesso ao ERP da oficina
+ERP_USER=        # Usuário do ERP
+ERP_PASS=        # Senha do ERP
+REDIS_HOST=      # Host do Redis (default: localhost)
+REDIS_PORT=      # Porta do Redis (default: 6379)
+DELAY_24H=       # (Opcional) Delay em ms para testes (padrão: 86400000)
+DELAY_6MESES=    # (Opcional) Delay em ms para testes (padrão: 15552000000)
 ```
