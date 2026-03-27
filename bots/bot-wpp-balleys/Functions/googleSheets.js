@@ -1,7 +1,9 @@
 const { google } = require('googleapis');
 const path = require('path');
+// 1. IMPORTAMOS O BANCO DE DADOS PARA BUSCAR O ID DA PLANILHA DO CLIENTE
+const { query } = require('../DataBase/conection');
 
-// 1. Configura a autenticação
+// 2. Configura a autenticação (Permanece igual, usa a mesma credencial global)
 const auth = new google.auth.GoogleAuth({
     keyFile: path.join(__dirname, '../credentials.json'), 
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
@@ -9,8 +11,25 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-// PUXA O MODO DE SIMULAÇÃO DO .ENV (Se não existir, por segurança assume como true)
 const MODO_SIMULACAO = process.env.MODO_SIMULACAO !== 'false'; 
+
+/**
+ * [NOVO] Função Auxiliar: Busca o ID da planilha do cliente no Banco de Dados
+ */
+async function getSheetId(clienteId) {
+    try {
+        const result = await query('SELECT google_sheets_id FROM clientes_config WHERE id = $1', [clienteId]);
+        if (result.rows.length > 0 && result.rows[0].google_sheets_id) {
+            return result.rows[0].google_sheets_id;
+        }
+    } catch (error) {
+        console.error(`❌ Erro ao buscar planilha no banco para o cliente ${clienteId}:`, error);
+    }
+    
+    // Fallback de segurança: Se o banco estiver vazio, tenta usar o do .env
+    console.log(`⚠️ [Aviso] Cliente ${clienteId} sem planilha no banco. Usando SHEET_ID do .env...`);
+    return process.env.SHEET_ID;
+}
 
 /**
  * Função Auxiliar para Log de Simulação
@@ -25,13 +44,14 @@ function logSimulacao(cliente, mensagem) {
 }
 
 /**
- * Executa a campanha de pós-venda
+ * Executa a campanha de pós-venda (AGORA RECEBE clienteId)
  */
-async function processarCampanhaPosVenda(sock) { 
-    const clientes = await obterClientesPosVenda();
+async function processarCampanhaPosVenda(sock, clienteId) { 
+    // Passa o clienteId para saber qual planilha ler
+    const clientes = await obterClientesPosVenda(clienteId);
 
     if (clientes.length === 0) {
-        console.log("⚠️ Nenhum cliente autorizado encontrado para disparo.");
+        console.log(`⚠️ Nenhum cliente autorizado encontrado para disparo (Cliente ID: ${clienteId}).`);
         return;
     }
     
@@ -41,20 +61,19 @@ async function processarCampanhaPosVenda(sock) {
         if (MODO_SIMULACAO) {
             logSimulacao(cliente, mensagem);
         } else {
-            console.log(`🚀 [DISPARO REAL] Enviando para: ${cliente.nome} (${cliente.numeroJid})`);
+            console.log(`🚀 [DISPARO REAL - Cliente ID: ${clienteId}] Enviando para: ${cliente.nome} (${cliente.numeroJid})`);
             
-            // Envio real pelo Baileys
             await sock.sendMessage(cliente.numeroJid, { text: mensagem });
             
-            // Delay anti-ban (30 segundos entre cada mensagem real)
+            // Delay anti-ban (30 segundos)
             await new Promise(resolve => setTimeout(resolve, 30000));
         }
     }
     
     if (MODO_SIMULACAO) {
-        console.log(`\n✅ Simulação concluída! ${clientes.length} mensagens processadas no log.`);
+        console.log(`\n✅ Simulação concluída! ${clientes.length} mensagens processadas.`);
     } else {
-        console.log(`\n✅ Envio real concluído para ${clientes.length} clientes.`);
+        console.log(`\n✅ Envio real concluído para ${clientes.length} clientes da oficina.`);
     }
 }
 
@@ -73,14 +92,14 @@ function formatarNumero(celularBruto) {
 }
 
 /**
- * Salva os dados do cliente na planilha
+ * Salva os dados do cliente na planilha (AGORA RECEBE clienteId)
  */
-async function salvarNoSheets(dados) {
+async function salvarNoSheets(dados, clienteId) {
     try {
-        const spreadsheetId = process.env.SHEET_ID;
+        const spreadsheetId = await getSheetId(clienteId);
         
         if (!spreadsheetId) {
-            console.error("❌ ERRO: SHEET_ID não definido no .env");
+            console.error(`❌ ERRO: Nenhuma planilha configurada para o Cliente ${clienteId}`);
             return;
         }
 
@@ -94,43 +113,42 @@ async function salvarNoSheets(dados) {
 
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Página1!A2', 
+            range: 'Leads_PreVenda!A2', 
             valueInputOption: 'RAW',
             resource: { values },
         });
 
-        console.log(`✅ [Sheets] Lead registrado na Página1.`);
+        console.log(`✅ [Sheets] Lead salvo na planilha do Cliente ${clienteId}.`);
     } catch (error) {
-        console.error("❌ Erro ao salvar no Google Sheets:", error.message);
+        console.error(`❌ Erro ao salvar no Google Sheets (Cliente ${clienteId}):`, error.message);
     }
 }
 
 /**
- * Lê a planilha para a campanha de pós-venda
+ * Lê a planilha para a campanha de pós-venda (AGORA RECEBE clienteId)
  */
-async function obterClientesPosVenda() {
+async function obterClientesPosVenda(clienteId) {
     try {
-        const spreadsheetId = process.env.SHEET_ID;
+        const spreadsheetId = await getSheetId(clienteId);
+        if (!spreadsheetId) return [];
         
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Clientes!A2:D', 
+            range: 'Base_PosVenda!A2:D', 
         });
 
         const linhas = response.data.values;
         if (!linhas || linhas.length === 0) {
-            console.log("⚠️ Aba 'Clientes' está vazia.");
+            console.log(`⚠️ Aba 'Base_PosVenda' está vazia na planilha do Cliente ${clienteId}.`);
             return [];
         }
 
         let clientesParaDisparo = [];
-        
-        // PUXA OS NÚMEROS DO .ENV E CRIA UM ARRAY
         const numerosPermitidosString = process.env.NUMEROS_PERMITIDOS || '';
         const numerosPermitidos = numerosPermitidosString
             .split(',')
             .map(num => num.trim())
-            .filter(num => num.length > 0); // Remove vazios
+            .filter(num => num.length > 0); 
 
         const travaAtiva = numerosPermitidos.length > 0;
 
@@ -142,7 +160,6 @@ async function obterClientesPosVenda() {
             if (celularBruto) {
                 let numeroPronto = formatarNumero(celularBruto);
                 
-                // Se a trava estiver desativada OU o número estiver na whitelist
                 if (!travaAtiva || numerosPermitidos.includes(numeroPronto)) {
                     clientesParaDisparo.push({
                         nome: nome,
@@ -156,69 +173,68 @@ async function obterClientesPosVenda() {
         });
 
         const statusModo = MODO_SIMULACAO ? 'SIMULAÇÃO' : 'DISPARO REAL';
-        console.log(`✅ [Sheets] ${clientesParaDisparo.length} clientes carregados. MODO: ${statusModo}.`);
+        console.log(`✅ [Sheets] ${clientesParaDisparo.length} alvos carregados do Cliente ${clienteId}. MODO: ${statusModo}.`);
         
         return clientesParaDisparo;
     } catch (error) {
-        console.error("❌ Erro ao ler aba Clientes:", error.message);
+        console.error(`❌ Erro ao ler aba Clientes (Cliente ${clienteId}):`, error.message);
         return [];
     }
 }
-/**
- * Salva o CSV inteiro e bruto na aba "Dados_ERP"
+
+/**EXPORTAR_CSV (1)
+ * Salva o CSV inteiro e bruto na aba "Dados_ERP" (AGORA RECEBE clienteId)
  */
-async function salvarDadosBrutosERP(cabecalho, linhas) {
+async function salvarDadosBrutosERP(cabecalho, linhas, clienteId) {
     try {
-        const spreadsheetId = process.env.SHEET_ID;
+        const spreadsheetId = await getSheetId(clienteId);
+        if (!spreadsheetId) return;
         
-        // 1. Limpa os dados velhos da aba Dados_ERP
         await sheets.spreadsheets.values.clear({ 
             spreadsheetId, 
-            range: 'Dados_ERP!A:ZZ' 
+            range: 'ERP_Clientes!A:ZZ' 
         });
 
-        // 2. Monta a tabela (Cabeçalho na primeira linha, dados nas outras)
         const values = [cabecalho, ...linhas];
 
-        // 3. Cola os dados novos
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Dados_ERP!A1',
+            range: 'ERP_Clientes!A1',
             valueInputOption: 'USER_ENTERED',
             resource: { values },
         });
 
-        console.log(`✅ [Sheets] Dados brutos (${linhas.length} linhas) atualizados na aba Dados_ERP.`);
+        console.log(`✅ [Sheets] Dados brutos (${linhas.length} linhas) atualizados para o Cliente ${clienteId}.`);
     } catch (error) {
-        console.error("❌ Erro ao salvar dados brutos no Sheets:", error.message);
+        console.error(`❌ Erro ao salvar dados ERP no Sheets (Cliente ${clienteId}):`, error.message);
     }
 }
 
 /**
- * Envia os dados filtrados para a aba "Clientes"
+ * Envia os dados filtrados para a aba "Clientes" (AGORA RECEBE clienteId)
  */
-async function atualizarAbaClientes(dadosLimpos) {
+async function atualizarAbaClientes(dadosLimpos, clienteId) {
     try {
-        const spreadsheetId = process.env.SHEET_ID;
+        const spreadsheetId = await getSheetId(clienteId);
+        if (!spreadsheetId) return;
         
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Clientes!A2', 
+            range: 'Base_PosVenda!A2', 
             valueInputOption: 'USER_ENTERED',
             resource: { values: dadosLimpos },
         });
 
-        console.log(`✅ [Sheets] ${dadosLimpos.length} clientes limpos adicionados à aba Clientes.`);
+        console.log(`✅ [Sheets] ${dadosLimpos.length} clientes adicionados à aba Clientes (Cliente ${clienteId}).`);
     } catch (error) {
-        console.error("❌ Erro ao salvar clientes no Sheets:", error.message);
+        console.error(`❌ Erro ao salvar clientes ERP no Sheets (Cliente ${clienteId}):`, error.message);
     }
 }
-
 
 module.exports = { 
     salvarNoSheets, 
     obterClientesPosVenda, 
     processarCampanhaPosVenda,
-    salvarDadosBrutosERP, // <-- Adicionado
-    atualizarAbaClientes  // <-- Adicionado
+    salvarDadosBrutosERP, 
+    atualizarAbaClientes  
 };

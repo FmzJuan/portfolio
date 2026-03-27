@@ -7,92 +7,97 @@ const {
 const qrcode = require("qrcode-terminal");
 const pino = require("pino");
 const path = require("path");
-const { iniciarWorker } = require('../Chat/RissatoMotors/worker');
+const fs = require("fs"); 
 
-let botStatus = 'desconectado';
+// 🏆 O "Estacionamento" de Bots: guarda quem está conectado
+const sessions = new Map();
 
-async function connectToWhatsApp(onMessage) {
-    // 1. Importa o socket da Dashboard (index.js)
+async function connectToWhatsApp(clienteId, onMessage) {
     const { io } = require('../index'); 
 
-    // 2. Busca a versão mais recente
     const { version, isLatest } = await fetchLatestBaileysVersion();
-    console.log(`- Usando WhatsApp Web v${version.join('.')}, isLatest: ${isLatest}`);
+    console.log(`- Iniciando WhatsApp para Cliente ID: ${clienteId} (v${version.join('.')})`);
 
-    const authPath = path.resolve(__dirname, '..', 'auth_info_baileys');
+    // Define o caminho da pasta principal "sessions"
+    const sessionsDir = path.resolve(__dirname, '..', 'sessions');
+    
+    // Se a pasta "sessions" não existir, o bot cria ela automaticamente
+    if (!fs.existsSync(sessionsDir)) {
+        fs.mkdirSync(sessionsDir, { recursive: true });
+    }
+
+    // 🔒 ISOLAMENTO: Cria a pasta única do cliente DENTRO da pasta sessions
+    const authPath = path.resolve(sessionsDir, `auth_info_${clienteId}`);
     const { state, saveCreds } = await useMultiFileAuthState(authPath);
 
-    // 3. Cria a instância do Bot
     const sock = makeWASocket({
         version,
         auth: state,
-        printQRInTerminal: false,
+        printQRInTerminal: true, // Deixei true para você ver no terminal por enquanto
         logger: pino({ level: 'silent' }),
-        browser: ["Ubuntu", "Chrome", "120.0.6099.129"], 
+        browser: [`LeadsFlow - Cliente ${clienteId}`, "Chrome", "120.0"], 
         markOnlineOnConnect: true,
     });
-    iniciarWorker(sock);
 
-    // 4. Monitora Conexão e envia para o IO (Dashboard)
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            botStatus = 'desconectado';
-            qrcode.generate(qr, { small: true });
-            io.emit('qr', qr); 
-            io.emit('status', 'desconectado');
+            // Emite o QR Code avisando de qual cliente é
+            io.emit(`qr-${clienteId}`, qr); 
+            io.emit(`status-${clienteId}`, 'desconectado');
         }
 
         if (connection === 'close') {
-            botStatus = 'desconectado';
-            io.emit('status', 'desconectado');
-            // ... (sua lógica de reconectar igual)
+            io.emit(`status-${clienteId}`, 'desconectado');
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             if (statusCode !== DisconnectReason.loggedOut) {
-                setTimeout(() => connectToWhatsApp(onMessage), 5000);
+                console.log(`⚠️ Cliente ${clienteId} caiu. Reconectando...`);
+                setTimeout(() => connectToWhatsApp(clienteId, onMessage), 5000);
+            } else {
+                console.log(`🛑 Cliente ${clienteId} desconectou o celular.`);
+                sessions.delete(clienteId); // Tira do estacionamento
             }
         } else if (connection === 'open') {
-            botStatus = 'conectado'; // ATUALIZA STATUS
-            console.log('✅ BOT ONLINE!');
-            io.emit('status', 'conectado'); // AVISA O FRONT
+            console.log(`✅ BOT DO CLIENTE ${clienteId} ONLINE!`);
+            sessions.set(clienteId, sock); // Guarda o bot pronto
+            io.emit(`status-${clienteId}`, 'conectado'); 
         }
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // 5. Escuta as mensagens
     sock.ev.on('messages.upsert', async (m) => {
+        if (m.type !== 'notify') return;
+
         const msg = m.messages[0];
-        if (!msg.message) return; // Removi o msg.key.fromMe daqui para você poder testar
+        if (!msg.message) return; 
 
         const from = msg.key.remoteJid;
-        if (from.endsWith('@g.us')) return; 
+        if (from.endsWith('@g.us')) return; // Ignora grupos
 
-        // Pega o texto da mensagem para verificar o comando
+        // 🚧 MODO DE TESTE (SANDBOX): Só processa o número permitido ou comandos próprios
+        const numeroPermitido = (process.env.NUMEROS_PERMITIDOS || '').split(',');
+        
+        // Se a mensagem não veio do número permitido E não fui eu mesmo enviando, ignora!
+        if (!from.includes(numeroPermitido) && !msg.key.fromMe) {
+            console.log(`[Sandbox] Ignorando mensagem do número: ${from}`);
+            return;
+        }
+
         const texto = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || "").toLowerCase();
 
-        // 🛡️ NOVA TRAVA DE AUTOTESTE:
-        // Se a mensagem for minha (fromMe) mas NÃO for o comando !disparar, eu ignoro para não dar loop.
         if (msg.key.fromMe && texto !== '!disparar' && texto !== '/relatorio') return;
 
-        // Verifica se é o Admin (Você ou a Amanda)
-        // DICA: Certifique-se que o ADMIN_NUMBER no .env está APENAS os números (ex: 5511984...)
-        const isAdmin = from.includes(process.env.ADMIN_NUMBER) || msg.key.fromMe;
-
-        if (isAdmin) {
-            console.log("✅ Admin/Self identificado. Executando comando...");
-            await onMessage(sock, msg);
-        } else {
-            console.log(`👤 Lead (${from}) detectado. Apenas salvando...`);
-            await onMessage(sock, msg, true); 
-        }
+        // Passa a mensagem adiante apenas se passou no filtro
+        await onMessage(clienteId, sock, msg);
     });
 
     return sock;
 }
-// Exportamos essa função para o index.js conseguir consultar o status a qualquer momento
-function getBotStatus() {
-    return botStatus;
+
+function getClientSocket(clienteId) {
+    return sessions.get(clienteId);
 }
-module.exports = { connectToWhatsApp, getBotStatus };
+
+module.exports = { connectToWhatsApp, getClientSocket };

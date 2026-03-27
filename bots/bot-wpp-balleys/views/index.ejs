@@ -177,13 +177,43 @@
 
     <script>
         const socket = io();
+        
+        // 1. Pega os dados que o Node.js mandou
+        const meuClienteId = '<%= clienteId %>';
+        const meuStatusInicial = '<%= statusAtual %>';
+        
         const badge = document.getElementById('status-badge');
         const canvas = document.getElementById('canvas-qr');
         const connectedIcon = document.getElementById('connected-icon');
         const logContainer = document.getElementById('activity-log');
         const qrMsg = document.getElementById('qr-msg');
 
+        // Função para atualizar a UI do Status (Reaproveitável)
+        function atualizarInterfaceStatus(status) {
+            if(status === 'conectado') {
+                badge.className = 'status-badge status-online';
+                badge.innerText = 'CONECTADO';
+                
+                if(canvas) canvas.style.display = 'none';
+                if(connectedIcon) connectedIcon.style.display = 'block';
+                qrMsg.innerText = "WhatsApp pronto para uso.";
+            } else {
+                badge.className = 'status-badge status-offline';
+                badge.innerText = 'DESCONECTADO';
+                
+                if(canvas) canvas.style.display = 'block';
+                if(connectedIcon) connectedIcon.style.display = 'none';
+                qrMsg.innerText = "Aguardando conexão...";
+            }
+        }
+
+        // 2. Força a tela a pintar o status inicial assim que a página carrega
+        atualizarInterfaceStatus(meuStatusInicial);
+
         function addLog(message, type = 'default') {
+            const placeholder = document.getElementById('log-placeholder');
+            if (placeholder) placeholder.style.display = 'none'; // Some com o placeholder no primeiro log
+
             const now = new Date();
             const timeStr = now.toLocaleTimeString('pt-BR');
             const entry = document.createElement('div');
@@ -200,11 +230,13 @@
             // Limita a quantidade de logs na tela para não pesar
             if (logContainer.children.length > 50) logContainer.lastChild.remove();
         }
+
         socket.on('connect', () => {
-        console.log("Conectado ao servidor de logs.");
-    });
-        // Evento de QR Code
-        socket.on('qr', (qrText) => {
+            console.log("Conectado ao servidor de logs do Cliente ID: " + meuClienteId);
+        });
+
+        // 3. Evento de QR Code ESPECÍFICO para este cliente
+        socket.on(`qr-${meuClienteId}`, (qrText) => {
             connectedIcon.style.display = 'none';
             canvas.style.display = 'block';
             qrMsg.innerText = "Escaneie para conectar o WhatsApp";
@@ -214,33 +246,22 @@
             });
             
             badge.className = 'status-badge status-offline';
-            badge.innerText = 'OFFLINE: AGUARDANDO LOGIN';
+            badge.innerText = 'AGUARDANDO LEITURA';
             addLog("Novo QR Code gerado. Aguardando leitura...");
         });
 
-        // Evento de Status de Conexão
-       socket.on('status', (status) => {
-        const qrCanvas = document.getElementById('canvas-qr');
-        const connectedIcon = document.getElementById('connected-icon');
-        const qrMsg = document.getElementById('qr-msg');
+        // 4. Evento de Status de Conexão ESPECÍFICO para este cliente
+        socket.on(`status-${meuClienteId}`, (status) => {
+            atualizarInterfaceStatus(status);
+        });
 
-        if(status === 'conectado') {
-            badge.className = 'status-badge status-online';
-            badge.innerText = 'CONECTADO';
-            
-            if(qrCanvas) qrCanvas.style.display = 'none';
-            if(connectedIcon) connectedIcon.style.display = 'block';
-            qrMsg.innerText = "WhatsApp pronto para uso.";
-        } else {
-            badge.className = 'status-badge status-offline';
-            badge.innerText = 'DESCONECTADO';
-            
-            if(qrCanvas) qrCanvas.style.display = 'block';
-            if(connectedIcon) connectedIcon.style.display = 'none';
-        }
-    });
-
-        // Logs de atividade do bot
+        // 5. Logs de atividade do bot ESPECÍFICOS para este cliente
+        // OBS: Lembre-se de alterar no seu index.js de io.emit('new-log') para io.emit(`new-log-${clienteId}`) depois!
+        socket.on(`new-log-${meuClienteId}`, (data) => {
+            addLog(data.msg, data.type || 'default');
+        });
+        
+        // Mantém a escuta antiga temporariamente caso você ainda não tenha mudado os logs no backend
         socket.on('new-log', (data) => {
             addLog(data.msg, data.type || 'default');
         });
