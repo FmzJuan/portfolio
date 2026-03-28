@@ -283,11 +283,25 @@ async function start() {
                     console.error("❌ Erro no processamento de lead:", err);
                 }
             });
+
+            // 💡 ADICIONE ISSO AQUI:
+            // Liga o Worker do BullMQ para este cliente específico
+            const workerPath = path.join(__dirname, 'Chat', cliente.subdominio, 'worker.js');
+            if (fs.existsSync(workerPath)) {
+                const { iniciarWorker } = require(workerPath);
+                // Pegamos o socket que acabou de ser conectado
+                const sock = getClientSocket(cliente.id);
+                if (sock) {
+                    iniciarWorker(sock); 
+                    console.log(`👷 Worker BullMQ ativado para: ${cliente.nome_oficina}`);
+                }
+            }
         }
     } catch (err) {
         console.error("❌ Erro fatal ao iniciar o sistema SaaS:", err);
     }
 }
+
 
 // Inicia o Servidor
 server.listen(3000, () => {
